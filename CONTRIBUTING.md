@@ -8,7 +8,7 @@ that trims media losslessly via a bundled FFmpeg sidecar.
 - **Bun** (latest) — https://bun.sh
 - **Rust** stable via `rustup`, with `clippy` and `rustfmt` (MSRV 1.82)
 - **Linux only** webview deps (from CI): `libwebkit2gtk-4.1-dev libssl-dev
-  libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf`
+libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf`
 
 ## Setup
 

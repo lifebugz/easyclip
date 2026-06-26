@@ -5,10 +5,10 @@
 EasyClip is pre-1.0. Only the latest release and the current `main` branch
 receive security fixes.
 
-| Version               | Supported |
-| --------------------- | --------- |
-| `main` / latest release | ✅ |
-| older 0.x             | ❌ |
+| Version                 | Supported |
+| ----------------------- | --------- |
+| `main` / latest release | ✅        |
+| older 0.x               | ❌        |
 
 ## Reporting a vulnerability
 
