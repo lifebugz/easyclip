@@ -66,6 +66,7 @@ test('getOutputPath returns null when saveName is empty', () => {
     container: 'mov,mp4',
     codec: 'h264',
     ext: 'mp4',
+    hasRealVideo: true,
     hasAudio: true,
     keyframes: []
   };
@@ -81,6 +82,7 @@ test('getOutputPath returns null when saveDir is empty', () => {
     container: 'mov,mp4',
     codec: 'h264',
     ext: 'mp4',
+    hasRealVideo: true,
     hasAudio: true,
     keyframes: []
   };
@@ -96,6 +98,7 @@ test('getOutputPath composes saveDir + sep + saveName + . + ext when everything 
     container: 'mov,mp4',
     codec: 'h264',
     ext: 'mp4',
+    hasRealVideo: true,
     hasAudio: true,
     keyframes: []
   };
@@ -113,6 +116,7 @@ test('getOutputPath normalises trailing PATH_SEP from saveDir', () => {
     container: 'mov,mp4',
     codec: 'h264',
     ext: 'mp4',
+    hasRealVideo: true,
     hasAudio: true,
     keyframes: []
   };
@@ -129,6 +133,7 @@ test('getOutputPath normalises trailing .ext from saveName (case-insensitive)', 
     container: 'mov,mp4',
     codec: 'h264',
     ext: 'mp4',
+    hasRealVideo: true,
     hasAudio: true,
     keyframes: []
   };

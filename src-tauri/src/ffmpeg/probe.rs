@@ -13,6 +13,11 @@ pub struct ProbedFields {
     pub container: String,
     pub codec: String,
     pub has_audio: bool,
+    /// True iff a non-attached_pic video stream is present. Attached-picture
+    /// streams (MP3/M4A/FLAC cover art) are reported by ffprobe as `video`
+    /// but are NOT decodable timelines — they must not enable `canSnap` or
+    /// route the file to video/poster mode (§3.1).
+    pub has_real_video: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -34,6 +39,14 @@ struct ProbeFormat {
 struct ProbeStream {
     codec_type: Option<String>,
     codec_name: Option<String>,
+    #[serde(default)]
+    disposition: Option<Disposition>,
+}
+
+#[derive(Debug, Deserialize)]
+struct Disposition {
+    #[serde(default)]
+    attached_pic: i64,
 }
 
 pub fn parse_probe_json(stdout: &str) -> Result<ProbedFields, AppError> {
@@ -57,10 +70,25 @@ pub fn parse_probe_json(stdout: &str) -> Result<ProbedFields, AppError> {
 
     let mut codec = String::new();
     let mut has_audio = false;
+    let mut has_real_video = false;
     for s in &parsed.streams {
+        let is_attached_pic = s
+            .disposition
+            .as_ref()
+            .map(|d| d.attached_pic == 1)
+            .unwrap_or(false);
         match s.codec_type.as_deref() {
-            Some("video") if codec.is_empty() => {
-                codec = s.codec_name.clone().unwrap_or_default();
+            Some("video") if !is_attached_pic => {
+                has_real_video = true;
+                // Take the FIRST real video's codec, but if that stream omits
+                // codec_name (ffprobe can report a `video` stream with no codec_name
+                // for an unidentifiable codec), recover from a later real-video
+                // stream rather than latching codec="" — matching the pre-V:0
+                // `codec.is_empty()` loop. has_real_video still latches on the first
+                // real video so the keyframe pass (gated on it) runs regardless.
+                if codec.is_empty() {
+                    codec = s.codec_name.clone().unwrap_or_default();
+                }
             }
             Some("audio") => {
                 has_audio = true;
@@ -74,11 +102,13 @@ pub fn parse_probe_json(stdout: &str) -> Result<ProbedFields, AppError> {
         container,
         codec,
         has_audio,
+        has_real_video,
     })
 }
 
-/// Parse the second ffprobe pass: `-select_streams v:0 -show_entries
-/// packet=pts_time,flags -of csv=p=0`.
+/// Parse the second ffprobe pass: `-select_streams V:0 -show_entries
+/// packet=pts_time,flags -of csv=p=0` (capital `V:0` = first video stream skipping
+/// attached_pic/cover art).
 ///
 /// Each row is `<pts_time>,<flags>`; keyframes have a `K` in their flags. If
 /// the keyframe count exceeds MAX_KF, returns an empty vec (cap behaviour
@@ -123,12 +153,21 @@ impl ProbeCommand {
         }
         let fields = parse_probe_json(&out1.stdout)?;
 
-        // Pass 2: keyframes.
-        let out2 = invoker.probe(ProbePass::KeyframePackets, file).await?;
-        if !out2.success() {
-            return Err(crate::error::classify_stderr(&out2.stderr));
-        }
-        let keyframes = parse_keyframes_packets(&out2.stdout);
+        // Pass 2: keyframes — ONLY when pass 1 found a real (non-attached_pic)
+        // video stream. The argv uses `-select_streams V:0` (capital) so ffprobe
+        // itself skips attached_pic/cover-art streams and selects the first real
+        // video regardless of stream index (§3.1). This guard is still kept so a
+        // cover-art-only audio file (no real video) skips pass 2 entirely and
+        // leaves `keyframes` empty → `canSnap` stays false.
+        let keyframes = if fields.has_real_video {
+            let out2 = invoker.probe(ProbePass::KeyframePackets, file).await?;
+            if !out2.success() {
+                return Err(crate::error::classify_stderr(&out2.stderr));
+            }
+            parse_keyframes_packets(&out2.stdout)
+        } else {
+            Vec::new()
+        };
 
         Ok(MediaInfo {
             path: file.to_string_lossy().into_owned(),
@@ -136,6 +175,7 @@ impl ProbeCommand {
             container: fields.container,
             codec: fields.codec,
             ext: derive_ext(file),
+            has_real_video: fields.has_real_video,
             has_audio: fields.has_audio,
             keyframes,
         })
@@ -289,6 +329,110 @@ mod tests {
         assert!(mi.keyframes.is_empty(), "over-cap MUST return empty");
         assert_eq!(mi.ext, "mkv");
         assert!(!mi.has_audio);
+    }
+
+    #[test]
+    fn parse_probe_json_excludes_attached_pic_cover_art() {
+        // MP3 with an embedded JPEG cover: ffprobe reports it as a video stream
+        // with disposition.attached_pic == 1. It must NOT count as a real video.
+        let json = r#"{
+          "format": { "duration": "180.0", "format_name": "mp3" },
+          "streams": [
+            { "codec_type": "video", "codec_name": "mjpeg", "disposition": { "attached_pic": 1 } },
+            { "codec_type": "audio", "codec_name": "mp3" }
+          ]
+        }"#;
+        let p = parse_probe_json(json).unwrap();
+        assert_eq!(p.codec, "", "attached_pic must not populate codec");
+        assert!(!p.has_real_video, "attached_pic is not a real video stream");
+        assert!(p.has_audio);
+    }
+
+    #[test]
+    fn parse_probe_json_prefers_real_video_over_attached_pic() {
+        // A real video stream plus a cover thumbnail: the real one wins.
+        let json = r#"{
+          "format": { "duration": "5.0", "format_name": "mov,mp4" },
+          "streams": [
+            { "codec_type": "video", "codec_name": "mjpeg", "disposition": { "attached_pic": 1 } },
+            { "codec_type": "video", "codec_name": "h264" }
+          ]
+        }"#;
+        let p = parse_probe_json(json).unwrap();
+        assert_eq!(p.codec, "h264");
+        assert!(p.has_real_video);
+    }
+
+    #[test]
+    fn parse_probe_json_recovers_codec_when_first_real_video_omits_codec_name() {
+        // ffprobe can report a `video` stream with no codec_name (unidentifiable
+        // codec). When it is the FIRST real (non-attached_pic) video and a LATER
+        // real video carries a codec_name, codec must recover from the later
+        // stream rather than latching "" — preserving the pre-`V:0` `codec.is_empty()`
+        // behaviour. has_real_video still latches on the first real video so the
+        // keyframe pass runs.
+        let json = r#"{
+          "format": { "duration": "5.0", "format_name": "mov,mp4" },
+          "streams": [
+            { "codec_type": "video" },
+            { "codec_type": "video", "codec_name": "h264" }
+          ]
+        }"#;
+        let p = parse_probe_json(json).unwrap();
+        assert_eq!(
+            p.codec, "h264",
+            "codec must recover from the later real video"
+        );
+        assert!(p.has_real_video);
+    }
+
+    #[test]
+    fn parse_probe_json_real_video_without_codec_name_keeps_has_real_video() {
+        // The codec-less video is the ONLY video stream, so there is nothing to
+        // recover from and codec stays "". has_real_video must still be true: the
+        // file genuinely HAS a real video stream. This is exactly why the wire must
+        // carry has_real_video rather than letting the frontend infer video from
+        // codec != "" — that heuristic would misroute this real video to audio.
+        let json = r#"{
+          "format": { "duration": "5.0", "format_name": "mov,mp4" },
+          "streams": [
+            { "codec_type": "video" },
+            { "codec_type": "audio", "codec_name": "aac" }
+          ]
+        }"#;
+        let p = parse_probe_json(json).unwrap();
+        assert_eq!(p.codec, "", "no codec_name anywhere ⇒ codec stays empty");
+        assert!(
+            p.has_real_video,
+            "a real video stream exists even when its codec is unidentifiable"
+        );
+        assert!(p.has_audio);
+    }
+
+    #[tokio::test]
+    async fn run_excludes_attached_pic_and_disables_keyframes_end_to_end() {
+        // Cover-art MP3: pass 1 reports an attached_pic video + audio. Because
+        // has_real_video is false, pass 2 is skipped entirely; this mock returns a
+        // keyframe row to prove that even if pass 2 DID run, its output is discarded.
+        // The assembled MediaInfo must report BOTH codec=="" AND keyframes==[] so
+        // the `canSnap` closure (keyframes.length > 0) stays false (§3.1).
+        let json = r#"{
+          "format": { "duration": "180.0", "format_name": "mp3" },
+          "streams": [
+            { "codec_type": "video", "codec_name": "mjpeg", "disposition": { "attached_pic": 1 } },
+            { "codec_type": "audio", "codec_name": "mp3" }
+          ]
+        }"#;
+        let mock = Arc::new(MockInvoker::ok(json, "0.0,K__\n")); // pass-2 has a keyframe
+        let mi = ProbeCommand::run(mock.as_ref(), &PathBuf::from("/tmp/song.mp3"))
+            .await
+            .unwrap();
+        assert_eq!(mi.codec, "", "cover-art file reports no video codec");
+        assert!(
+            mi.keyframes.is_empty(),
+            "keyframe pass must be discarded when there is no real video stream"
+        );
+        assert!(mi.has_audio);
     }
 
     #[tokio::test]

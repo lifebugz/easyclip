@@ -1,0 +1,94 @@
+name: Release (Windows)
+
+# Build a Windows installer (.exe) and attach it to a DRAFT GitHub Release.
+#
+# HOW TO USE: GitHub -> Actions -> "Release (Windows)" -> Run workflow. When it
+# finishes, a DRAFT release appears under Releases with the installer attached;
+# review/test it, then click "Publish release" (or just download the .exe from
+# the draft). The draft means nothing goes public until you say so.
+#
+# Produces ONLY the NSIS per-user installer (EasyClip_<version>_x64-setup.exe),
+# which is friendlier for non-technical users than the per-machine .msi (no admin
+# elevation). To also build the .msi, remove the `--bundles nsis` arg below.
+#
+# IMPORTANT: the installer is UNSIGNED. On first run Windows SmartScreen shows
+# "Windows protected your PC" — the user must click "More info" then "Run anyway".
+# Removing that prompt needs a paid Authenticode code-signing certificate.
+#
+# To also cut a release automatically on a version tag, add:
+#   push:
+#     tags: ['v*']
+# (and drop the explicit `tagName` below so tauri-action uses the pushed tag).
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write # tauri-action needs this to create the Release
+
+env:
+  CARGO_TERM_COLOR: always
+  # Job-level so EVERY step inherits it — both the explicit sidecar fetch below
+  # AND tauri-action's `tauri build` (whose beforeBuildCommand re-runs
+  # setup:ffmpeg). It skips detectTargetTriple()'s `rustc -vV` parse, which the
+  # windows-latest image stopped emitting parseably (same fix as ci.yml).
+  EASYCLIP_TARGET_TRIPLE: x86_64-pc-windows-msvc
+
+jobs:
+  build-windows:
+    name: Build Windows installer (NSIS .exe)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ./src-tauri -> target
+
+      - name: Install JS deps
+        run: bun install --frozen-lockfile
+
+      # The root tsconfig extends the gitignored .svelte-kit/tsconfig.json; sync
+      # generates it so the Svelte build resolves types (mirrors ci.yml).
+      - name: Sync SvelteKit
+        run: bunx svelte-kit sync
+
+      # Populate src-tauri/binaries/ with the Windows ffmpeg/ffprobe sidecars
+      # BEFORE the build. `shell: bash` so the extractor's spawnSync('unzip')
+      # finds git-bash's unzip (the default Windows shell is pwsh, which lacks
+      # it). setup:ffmpeg is idempotent — it skips when the sidecar is already in
+      # place — so the build's beforeBuildCommand re-run is a no-op needing no unzip.
+      - name: Fetch FFmpeg sidecar
+        shell: bash
+        run: bun run setup:ffmpeg
+
+      # Runs `bunx tauri build --bundles nsis` (beforeBuildCommand: setup:ffmpeg
+      # [no-op, sidecars present] + vite build), then uploads the NSIS installer
+      # to a DRAFT release. `tauriScript: bunx tauri` makes tauri-action use Bun
+      # to invoke the local @tauri-apps/cli rather than guessing the runner.
+      - name: Build + draft release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tauriScript: bunx tauri
+          args: --bundles nsis
+          tagName: easyclip-v__VERSION__ # __VERSION__ is read from tauri.conf.json
+          releaseName: 'EasyClip v__VERSION__ (Windows)'
+          releaseBody: |
+            Unsigned Windows installer (NSIS, per-user — no admin needed).
+
+            On first run Windows SmartScreen may show "Windows protected your PC".
+            Click **More info** then **Run anyway**. This is expected for apps
+            without a paid code-signing certificate.
+          releaseDraft: true
+          prerelease: false

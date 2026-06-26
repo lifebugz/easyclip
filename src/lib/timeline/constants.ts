@@ -12,3 +12,14 @@ export const CUT_DRAG_THRESH_PX = 4;
 
 /** Snap radius in pixels. Consumed in Phase 8 only; defined here so both phases share one source. */
 export const SNAP_PX = 14;
+
+/** Poster-mode re-extract floor (ms): caps the self-pacing refresh at ~10fps (§6). */
+export const POSTER_MIN_SPACING_MS = 100;
+
+/** Debounce (ms) for poster re-extraction on scrub while paused (§6). */
+export const POSTER_SCRUB_DEBOUNCE_MS = 150;
+
+/** Classification timeout (ms): if neither loadedmetadata nor error fires, fall
+ *  back to codec-only routing (poster when hasVideo, else art) so the box never
+ *  hangs (§3). */
+export const DECODE_TIMEOUT_MS = 4000;

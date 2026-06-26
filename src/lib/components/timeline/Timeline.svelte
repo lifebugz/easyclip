@@ -24,6 +24,8 @@
   import Playhead from './Playhead.svelte';
   import WaveformOverlay from './WaveformOverlay.svelte';
   import { seedToWaveBars } from '$lib/timeline/waveform-seed';
+  import { isTextEntryTarget } from '$lib/util/dom';
+  import { isEscapeOwned } from '$lib/util/escape-owner';
 
   let trackEl = $state<HTMLDivElement | null>(null);
   let hoverPct = $state<number | null>(null);
@@ -356,7 +358,7 @@
 
   function handleKeydown(e: KeyboardEvent): void {
     const target = e.target as HTMLElement | null;
-    if (target !== null && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return;
+    if (isTextEntryTarget(target)) return;
     // Ignore keyboard delete while a pointer gesture is in flight (symmetric with
     // the Escape path below): otherwise a mid-resize Delete on a focused cut would
     // mutate cuts under the gesture and then be silently undone by its snapshot.
@@ -384,14 +386,16 @@
   // suppress WebKit history-back, and they read the focused .cut-region target.
   function handleKeyup(e: KeyboardEvent): void {
     if (e.key !== 'Escape') return;
-    const target = e.target as HTMLElement | null;
-    if (target !== null && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return;
-    // A ConfirmModal (native <dialog showModal()>) owns Escape while open: stand
-    // down so one Escape doesn't also cancel a gesture / dismiss the merge prompt
-    // behind the modal. In WKWebView the dialog is still [open] at keyup time (it
-    // closes a tick later via its open-prop effect), so this guard fires exactly
-    // when the invariant needs it. §11 mutual-exclusion.
-    if (document.querySelector('dialog[open]') !== null) return;
+    if (isTextEntryTarget(e.target)) return;
+    // A modal (ConfirmModal) owns Escape while open: stand down so one Escape
+    // doesn't also cancel a gesture / dismiss the merge prompt behind it. The
+    // modal's keyup handler runs before this one and closes itself, but the
+    // registry defers its unregister to a macrotask (Svelte flushes effects, and
+    // a microtask checkpoint runs, between the two window listeners), so the owner
+    // is still set here — type-agnostic, no DOM query, no native-<dialog>
+    // coupling. §11 mutual-exclusion. (The merge prompt is timeline-owned, so it
+    // does NOT register — Escape SHOULD dismiss it below.)
+    if (isEscapeOwned()) return;
     if (activeCancel !== null) {
       activeCancel();
       return;

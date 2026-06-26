@@ -70,6 +70,17 @@ jobs:
         run: bunx svelte-kit sync
 
       - name: Fetch FFmpeg sidecar
+        # Don't depend on the runner image's incidental tooling for sidecar setup:
+        #  - EASYCLIP_TARGET_TRIPLE skips detectTargetTriple()'s `rustc -vV` parse.
+        #    The windows-latest image stopped emitting a parseable `host:` line, so
+        #    detection threw "could not parse rustc -vV output"; the matrix already
+        #    knows the triple, so pass it directly.
+        #  - shell: bash runs the script under git-bash so its spawnSync('unzip'/
+        #    'tar') extraction finds those tools on PATH (the windows default shell
+        #    is pwsh, which may not expose them). No-op on ubuntu/macos (bash default).
+        shell: bash
+        env:
+          EASYCLIP_TARGET_TRIPLE: ${{ matrix.triple }}
         run: bun run setup:ffmpeg
 
       # L1 binary resolution (resolve_path_binary) consumes these. Defaults
@@ -103,6 +114,12 @@ jobs:
           "EASYCLIP_TEST_FFPROBE=$bin\ffprobe.exe" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
       - name: bun run check
+        # smoke-sidecar.ts (the last command in `bun run check`) resolves the
+        # target triple the same way as setup:ffmpeg — prefer EASYCLIP_TARGET_TRIPLE
+        # over parsing `rustc -vV`, which the windows-latest image stopped emitting
+        # parseably. Without this the check job fails at the smoke step on Windows.
+        env:
+          EASYCLIP_TARGET_TRIPLE: ${{ matrix.triple }}
         run: bun run check
 
       - name: Install Playwright browsers

@@ -4,15 +4,7 @@
 import { existsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
-import { sidecarFilename } from './setup-ffmpeg/place.ts';
-
-function detectTargetTriple(): string {
-  const r = spawnSync('rustc', ['-vV'], { encoding: 'utf8' });
-  if (r.status !== 0) throw new Error('rustc not found');
-  const hostLine = r.stdout.split('\n').find((line) => line.startsWith('host:'));
-  if (!hostLine) throw new Error('cannot parse rustc -vV');
-  return hostLine.replace('host:', '').trim();
-}
+import { sidecarFilename, resolveTargetTriple } from './setup-ffmpeg/place.ts';
 
 function smokeOne(triple: string, base: 'ffmpeg' | 'ffprobe', expectedSubstring: string): void {
   const path = join(import.meta.dir, '..', 'src-tauri', 'binaries', sidecarFilename(triple, base));
@@ -47,7 +39,11 @@ function smokeOne(triple: string, base: 'ffmpeg' | 'ffprobe', expectedSubstring:
 }
 
 function main(): void {
-  const triple = detectTargetTriple();
+  // Shared resolver (place.ts): prefer EASYCLIP_TARGET_TRIPLE over parsing
+  // `rustc -vV`, which the windows-latest image stopped emitting parseably and
+  // which would otherwise break this script inside `bun run check`. CI passes
+  // the matrix triple via that env var.
+  const triple = resolveTargetTriple();
   smokeOne(triple, 'ffmpeg', 'ffmpeg version');
   smokeOne(triple, 'ffprobe', 'ffprobe version');
 }

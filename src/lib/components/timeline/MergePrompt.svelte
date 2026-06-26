@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { t } from '$lib/i18n/index.svelte';
 
   interface Props {
@@ -10,10 +11,12 @@
   let { midPct, onConfirm, onCancel }: Props = $props();
 
   let confirmEl: HTMLButtonElement | null = $state<HTMLButtonElement | null>(null);
-  // Mount-time focus (no tracked deps beyond confirmEl, set once on bind) — moves
-  // keyboard focus to the primary action when the prompt appears. DF-2/D6: the
-  // cut-create merge path relies on this instead of focusing the new cut.
-  $effect(() => {
+  // Move keyboard focus to the primary action when the prompt appears. onMount
+  // (not $effect) so it fires exactly ONCE after the bind commits — an $effect
+  // would re-run on any future reactive change and re-steal focus to this
+  // destructive button mid-interaction. DF-2/D6: the cut-create merge path
+  // relies on this instead of focusing the new cut.
+  onMount(() => {
     confirmEl?.focus();
   });
 </script>

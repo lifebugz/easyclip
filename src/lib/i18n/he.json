@@ -36,6 +36,8 @@
   "edit.aria.deleteCut": "מחיקת חיתוך",
   "transport.play": "הפעל",
   "transport.pause": "השהה",
+  "preview.note.poster": "מציג פריימים שחולצו — תצוגה מקדימה חיה אינה זמינה לפורמט הזה.",
+  "preview.note.unavailable": "תצוגה מקדימה חיה אינה זמינה לפורמט הזה.",
   "save.h1": "איפה לשמור?",
   "save.hint": "אנחנו נשמור את העותק המקוצץ כאן. הקובץ המקורי לא משתנה.",
   "save.filename": "שם קובץ",

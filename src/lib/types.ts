@@ -6,8 +6,9 @@ export interface MediaInfo {
   path: string;
   duration: number; // seconds
   container: string;
-  codec: string;
+  codec: string; // video codec NAME for display; '' when absent OR unidentifiable
   ext: string; // canonical extension, lowercased, no leading dot
+  hasRealVideo: boolean; // route video-vs-audio on THIS, not codec !== '' (see VideoPreview)
   hasAudio: boolean;
   keyframes: number[]; // ascending seconds; empty when over MAX_KF (snap disabled)
 }

@@ -6,6 +6,7 @@
   import { formatDuration } from '$lib/util/format-duration';
   import { pathStem, pathDirname } from '$lib/util/path';
   import { appErrorToKey, isAppError } from '$lib/util/app-error';
+  import { isTextEntryTarget } from '$lib/util/dom';
   import type { MediaInfo } from '$lib/types';
 
   interface Props {
@@ -93,8 +94,7 @@
   // file-pick step (the wrapper element receives focus on step transitions).
   function handleKeydown(e: KeyboardEvent): void {
     // Avoid hijacking shortcuts when an input/textarea is focused.
-    const target = e.target as HTMLElement | null;
-    if (target !== null && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return;
+    if (isTextEntryTarget(e.target)) return;
 
     const isCmdOrCtrl = e.metaKey || e.ctrlKey;
     if (isCmdOrCtrl && e.key.toLowerCase() === 'o') {

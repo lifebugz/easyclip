@@ -94,17 +94,17 @@ test('empty filename: error visible, Start-processing disabled', async ({ page }
   await expect(page.locator('[data-action="start-processing"]')).toBeDisabled();
 });
 
-test('filename with shell metacharacter: invalid-chars error, Start-processing disabled', async ({
+test('filename with shell punctuation (& $ ; `) is accepted — argv spawn, not a shell', async ({
   page
 }) => {
   await gotoSaveStep(page);
   const nameInput = page.locator('[data-input="filename"]');
-  await nameInput.fill('bad;name');
+  // & $ ; ` are valid filename chars; ffmpeg runs via argv, so they are never
+  // shell-interpreted. "Mom & Dad" must be accepted, not flagged invalid-chars.
+  await nameInput.fill('Mom & Dad');
 
-  await expect(page.locator('#save-name-error')).toContainText(
-    "That filename has characters we can't use"
-  );
-  await expect(page.locator('[data-action="start-processing"]')).toBeDisabled();
+  await expect(page.locator('#save-name-error')).toHaveCount(0);
+  await expect(page.locator('[data-action="start-processing"]')).toBeEnabled();
 });
 
 test('filename with forward slash: invalid-chars error', async ({ page }) => {
@@ -138,15 +138,14 @@ test('empty location: error visible, Start-processing disabled', async ({ page }
   await expect(page.locator('[data-action="start-processing"]')).toBeDisabled();
 });
 
-test('location with shell metacharacter: invalid-chars error', async ({ page }) => {
+test('location with shell punctuation (&) is accepted', async ({ page }) => {
   await gotoSaveStep(page);
   const dirInput = page.locator('[data-input="location"]');
-  await dirInput.fill('/bad;dir');
+  // A real folder like "C:\\Users\\Mom & Dad\\Movies" must not be rejected.
+  await dirInput.fill('/Users/Mom & Dad/Movies');
 
-  await expect(page.locator('#save-dir-error')).toContainText(
-    "That filename has characters we can't use"
-  );
-  await expect(page.locator('[data-action="start-processing"]')).toBeDisabled();
+  await expect(page.locator('#save-dir-error')).toHaveCount(0);
+  await expect(page.locator('[data-action="start-processing"]')).toBeEnabled();
 });
 
 test('valid form: Start-processing advances to processing step', async ({ page }) => {
@@ -195,7 +194,9 @@ test('HE invalid-chars error renders in Hebrew', async ({ page }) => {
   await page.getByRole('button', { name: 'המשך' }).click();
   await page.getByRole('button', { name: 'המשך' }).click();
 
-  await page.locator('[data-input="filename"]').fill('bad;name');
+  // Trigger invalid-chars with a still-rejected character (a path separator is
+  // never valid in a bare filename) — shell punctuation like ';' is now accepted.
+  await page.locator('[data-input="filename"]').fill('foo/bar');
   await expect(page.locator('#save-name-error')).toContainText(
     'יש בשם הקובץ הזה תווים שאנחנו לא יכולים להשתמש בהם'
   );

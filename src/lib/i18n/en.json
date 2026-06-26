@@ -36,6 +36,8 @@
   "edit.aria.deleteCut": "Delete cut",
   "transport.play": "Play",
   "transport.pause": "Pause",
+  "preview.note.poster": "Showing extracted frames — live preview isn't available for this format.",
+  "preview.note.unavailable": "Live preview isn't available for this format.",
   "save.h1": "Where should we save?",
   "save.hint": "We'll save the trimmed copy here. Your original file is never modified.",
   "save.filename": "Filename",

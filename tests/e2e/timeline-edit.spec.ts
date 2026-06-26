@@ -355,6 +355,10 @@ test('merge-creating drag focuses the prompt, not the new cut', async ({ page })
   await dragOnTrack(page, 0.3, 0.5);
   await dragOnTrack(page, 0.6, 0.4); // merge
   await expect(page.locator('.merge-prompt .prompt-btn.confirm')).toBeFocused();
+  // ...and NOT the freshly-committed cut: focusNewCut() must be skipped on the merge
+  // path. Without this negative assertion the test is indistinguishable from the
+  // 'confirm receives focus on open' case above and proves nothing about the split.
+  await expect(page.locator('.cut-region .cut-x:focus')).toHaveCount(0);
 });
 
 // ── Commit 6 (DF-1): exact keyframe-snapped FINAL duration ──
@@ -362,6 +366,12 @@ test('merge-creating drag focuses the prompt, not the new cut', async ({ page })
 test('FINAL readout reflects the keyframe-snapped plan_duration, not raw arithmetic', async ({
   page
 }) => {
+  // Pin the viewport so the interactive snap radius (SNAP_PX * duration/trackWidth)
+  // is deterministic. The discriminator below relies on cut end 55 staying
+  // UNsnapped during the drag (raw 1:35 vs snapped 1:30); a narrower viewport
+  // could widen the radius enough to snap end→60, collapsing both to 1:30 and
+  // letting the test pass without ever consulting plan_duration.
+  await page.setViewportSize({ width: 1280, height: 800 });
   await gotoTimeline(page); // 120s clip, keyframes every 10s (PROBE_120)
   // Cut [30s, 55s]: the cut END (55s) sits 5s from the nearest keyframe — outside
   // the ~2.3s interactive snap radius — so it is NOT snapped during the drag.
@@ -372,4 +382,45 @@ test('FINAL readout reflects the keyframe-snapped plan_duration, not raw arithme
   await expect(page.locator('.cut-region:not(.pending)')).toHaveCount(1);
   // Debounced (250ms) round-trip then lands on the mocked planned (snapped) value.
   await expect(page.locator('.readout-val').last()).toHaveText('1:30', { timeout: 2000 });
+  // Once the plan has settled the FINAL piece is no longer busy — aria-busy mirrors
+  // the same `computing` flag as the visual dim, so a settled readout exposes
+  // aria-busy="false" (and the binding's removal would surface as a missing attr).
+  await expect(page.locator('.readout-piece').last()).toHaveAttribute('aria-busy', 'false');
+});
+
+test('audio-only file: a selection that collapses below MIN_CUT_DUR disables Continue', async ({
+  page
+}) => {
+  // Non-snappable file (keyframes: []). The export runs build_plan with an empty
+  // keyframe table and rejects SelectionTooNarrow when no kept range survives
+  // MIN_CUT_DUR (0.25s). The plan_duration round-trip runs here too (it is no longer
+  // gated on snappable files), so `plan.wouldBeTooNarrow` carries that verdict and
+  // the Continue gate mirrors it locally — the user can't walk into a hard export
+  // failure. Short 1.5s clip so 0.25s is a comfortable ~17% of the track: a single
+  // centered cut leaves 0.15s slivers at both ends, both sub-threshold.
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await gotoTimeline(page, {
+    probeResult: {
+      path: '/fixtures/short.m4a',
+      duration: 1.5,
+      container: 'mov,mp4,m4a,3gp,3g2,mj2',
+      codec: '',
+      ext: 'm4a',
+      hasAudio: true,
+      keyframes: []
+    }
+  });
+  // No cuts yet → the whole 1.5s trim survives (>= MIN_CUT_DUR) → Continue enabled
+  // once the initial plan settles.
+  await expect(page.getByRole('button', { name: 'Continue' })).toBeEnabled();
+  // Cut [0.15s, 1.35s] (width 1.2s commits) leaves only [0,0.15] and [1.35,1.5] —
+  // both 0.15s < MIN_CUT_DUR. build_plan drops both and aborts SelectionTooNarrow.
+  await dragOnTrack(page, 0.1, 0.9);
+  await expect(page.locator('.cut-region:not(.pending)')).toHaveCount(1);
+  // Wait for the debounced round-trip to SETTLE on the too-narrow verdict: FINAL
+  // reads 0:00. This proves the disable below is the `tooNarrow` verdict (the
+  // build_plan round-trip ran for this non-snappable file), not just the transient
+  // `computing` guard during settle.
+  await expect(page.locator('.readout-val').last()).toHaveText('0:00', { timeout: 2000 });
+  await expect(page.getByRole('button', { name: 'Continue' })).toBeDisabled();
 });

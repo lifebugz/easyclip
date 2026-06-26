@@ -31,6 +31,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::probe_media,
+            commands::extract_poster_frame,
             commands::process_media,
             commands::plan_duration,
             commands::cancel_processing,

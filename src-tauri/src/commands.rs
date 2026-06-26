@@ -42,6 +42,17 @@ pub async fn probe_media(
     ProbeCommand::run(invoker, &validated as &Path).await
 }
 
+#[tauri::command]
+pub async fn extract_poster_frame(
+    path: String,
+    time_seconds: f64,
+    state: tauri::State<'_, FfmpegInvokerHandle>,
+) -> Result<String, AppError> {
+    let validated = validate_media_path(&path)?;
+    let invoker: &dyn FfmpegInvoker = state.inner().as_ref();
+    crate::ffmpeg::poster::PosterCommand::run(invoker, &validated as &Path, time_seconds).await
+}
+
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PlanDurationResult {
@@ -198,6 +209,39 @@ mod tests {
         // fires before the orchestrator runs.
         let r = validate_media_path("/this/does/not/exist.mp4");
         assert!(matches!(r, Err(AppError::InputPathInvalid { .. })));
+    }
+
+    #[tokio::test]
+    async fn extract_poster_frame_rejects_missing_input_path() {
+        // The command-body validator fires before PosterCommand::run.
+        let r = validate_media_path("/this/does/not/exist.mkv");
+        assert!(matches!(r, Err(AppError::InputPathInvalid { .. })));
+    }
+
+    #[tokio::test]
+    async fn extract_poster_frame_runs_on_validated_path() {
+        // Exercise the command body's happy control-flow (validate → run) against
+        // a mock scripted with a successful exit, mirroring the
+        // probe_media_returns_media_info_on_happy_path pattern. The mock exits 0
+        // without writing PosterCommand's internal tempfile, so the read yields 0
+        // bytes → the empty-output reject contract fires (an exit-0-but-empty run
+        // is a failure, not Ok("")). Real bytes → Task 11 UAT.
+        let mut f = NamedTempFile::new().unwrap();
+        write!(f, "fake-but-existing").unwrap();
+        let path_str = f.path().to_string_lossy().to_string();
+
+        let mock = MockInvoker::ok("{}", "");
+        mock.push_run(crate::ffmpeg::invoker::ScriptedRun {
+            events: vec![crate::ffmpeg::invoker::RunEvent::Terminated {
+                code: Some(0),
+                signal: None,
+            }],
+        });
+        let handle: FfmpegInvokerHandle = Arc::new(mock);
+
+        let validated = validate_media_path(&path_str).unwrap();
+        let r = crate::ffmpeg::poster::PosterCommand::run(handle.as_ref(), &validated, 0.0).await;
+        assert!(matches!(r, Err(AppError::Unknown { .. })), "got {r:?}");
     }
 }
 

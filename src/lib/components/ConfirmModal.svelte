@@ -1,6 +1,8 @@
 <script lang="ts">
   import { untrack } from 'svelte';
   import { t, type TranslationKey } from '$lib/i18n/index.svelte';
+  import { isTextEntryTarget } from '$lib/util/dom';
+  import { registerEscapeOwner, unregisterEscapeOwner } from '$lib/util/escape-owner';
 
   interface Props {
     open: boolean;
@@ -33,8 +35,24 @@
   const uid = untrack(() => id) ?? crypto.randomUUID();
   const titleId = `${uid}-title`;
   const bodyId = `${uid}-body`;
+  // Stable per-instance token for the Escape-ownership registry (see below).
+  const escapeId = Symbol('confirm-modal');
 
   let dialogEl: HTMLDialogElement | null = $state<HTMLDialogElement | null>(null);
+
+  // While open, claim the Escape key so the timeline's window keyup handler
+  // (gesture-cancel / merge-prompt-dismiss) stands down — one Escape, one action.
+  // The cleanup unregisters on open→false (or unmount); the registry DEFERS the
+  // actual removal to a macrotask, so the owner survives the whole keyup dispatch
+  // even though Svelte flushes this cleanup mid-dispatch (this modal's keyup
+  // handler runs before the timeline's). See util/escape-owner.ts for the timing.
+  $effect(() => {
+    if (!open) return;
+    registerEscapeOwner(escapeId);
+    return () => {
+      unregisterEscapeOwner(escapeId);
+    };
+  });
 
   // Drive the native modal state from the `open` prop. showModal() throws if
   // called on an already-open dialog, and close() is a no-op on a closed one,
@@ -70,8 +88,7 @@
   function handleEscapeKeyup(e: KeyboardEvent): void {
     if (!open) return;
     if (e.key !== 'Escape') return;
-    const target = e.target as HTMLElement | null;
-    if (target !== null && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return;
+    if (isTextEntryTarget(e.target)) return;
     onCancel();
   }
 </script>
