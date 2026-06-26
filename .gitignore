@@ -39,8 +39,8 @@ Thumbs.db
 .idea/
 *.swp
 
-# Claude Code (per-machine local config)
-.claude/settings.local.json
+# Claude Code (per-machine local config, plugin cache, worktrees)
+.claude/
 
 # Env
 .env
