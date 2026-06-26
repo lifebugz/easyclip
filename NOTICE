@@ -1,0 +1,27 @@
+EasyClip
+Copyright (c) 2026 lifebugz
+Licensed under the MIT License (see LICENSE).
+
+This application bundles the following third-party software as separate
+sidecar executables, invoked as child processes (NOT linked into the EasyClip
+binary):
+
+  FFmpeg and ffprobe — version 8.1
+  Licensed under the GNU Lesser General Public License, version 2.1 or later
+  (LGPL-2.1-or-later). Copyright (c) the FFmpeg developers.
+
+  These are LGPL builds (configured WITHOUT --enable-gpl and WITHOUT
+  --enable-nonfree) and are unmodified upstream binaries.
+
+  Corresponding source: https://ffmpeg.org/download.html
+  The exact builds and SHA-256 checksums used by EasyClip are pinned in
+  scripts/ffmpeg-checksums.json. Upstream build mirrors:
+    - macOS:   https://ffmpeg.martin-riedl.de/  (and https://evermeet.cx/ffmpeg/)
+    - Windows: https://github.com/BtbN/FFmpeg-Builds
+
+  LGPL relink/replace right: because FFmpeg is shipped as a SEPARATE
+  executable, you may use a modified FFmpeg by replacing the sidecar binary
+  at src-tauri/binaries/ffmpeg-<target-triple> (or the corresponding file
+  inside the installed application bundle) with your own LGPL-compatible build.
+
+Full third-party license texts are in THIRD-PARTY-LICENSES.md.
