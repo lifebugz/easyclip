@@ -1,0 +1,50 @@
+name: Claude Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review, reopened]
+    # Optional: Only run on specific file changes
+    # paths:
+    #   - "src/**/*.ts"
+    #   - "src/**/*.tsx"
+    #   - "src/**/*.js"
+    #   - "src/**/*.jsx"
+
+jobs:
+  claude-review:
+    # Public-repo abuse guard: only review PRs opened/pushed by the repo owner,
+    # so external PRs never spend a billed Claude run. To allow more authors,
+    # extend the check, e.g.
+    #   github.actor == 'lifebugz' || github.actor == 'trusted-collaborator'
+    if: github.actor == 'lifebugz'
+
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: read
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Run Claude Code Review
+        id: claude-review
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          plugin_marketplaces: 'https://github.com/anthropics/claude-code.git'
+          plugins: 'code-review@claude-code-plugins'
+          prompt: '/code-review:code-review --comment ${{ github.repository }}/pull/${{ github.event.pull_request.number }}'
+          # The plugin frontmatter PERMITS mcp__github_inline_comment__create_inline_comment, but
+          # the action only BOOTS that MCP server when the tool is in the action-level allowedTools
+          # (parsed from claude_args, before Claude starts). Without this, the "issues found" path
+          # posts inline comments to a server that never started -> silent no-op. Additive: the
+          # default file/grep/read-only-git tools and the plugin's gh Bash grants are unaffected.
+          claude_args: '--allowedTools "mcp__github_inline_comment__create_inline_comment"'
+          # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
+          # or https://code.claude.com/docs/en/cli-reference for available options
+

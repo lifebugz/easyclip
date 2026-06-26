@@ -1,0 +1,726 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sketch 002: Cut Treatment — "Going Out" Region Visual</title>
+    <link rel="stylesheet" href="../themes/default.css" />
+    <style>
+      /* ───── Reset + base ─────────────────────────────────────────── */
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        font-family: var(--font-sans);
+        background: var(--color-bg);
+        color: var(--color-text);
+        padding-top: 52px;
+      }
+
+      /* ───── Variant nav ──────────────────────────────────────────── */
+      #variant-nav {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 9998;
+        background: var(--color-surface);
+        border-bottom: 1px solid var(--color-border);
+        padding: 8px 16px;
+        display: flex;
+        gap: 6px;
+      }
+      .variant-tab {
+        padding: 6px 14px;
+        font: 500 var(--text-sm) var(--font-sans);
+        background: transparent;
+        border: 1px solid var(--color-border-strong);
+        border-radius: var(--radius-sm);
+        color: var(--color-text-body);
+        cursor: pointer;
+        transition: all 0.15s ease;
+      }
+      .variant-tab:hover {
+        background: var(--color-bg);
+      }
+      .variant-tab.active {
+        background: var(--color-primary);
+        color: white;
+        border-color: var(--color-primary);
+      }
+      .variant {
+        display: none;
+      }
+      .variant.active {
+        display: block;
+      }
+
+      /* ───── App shell (matches sketch 001's D winner) ──────────── */
+      .app {
+        max-width: 1100px;
+        margin: 0 auto;
+        background: var(--color-surface);
+        min-height: calc(100vh - 52px);
+        display: flex;
+        flex-direction: column;
+        border-left: 1px solid var(--color-border);
+        border-right: 1px solid var(--color-border);
+      }
+      .app-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px 24px;
+        border-bottom: 1px solid var(--color-border);
+      }
+      .app-title {
+        font-weight: 700;
+        font-size: var(--text-base);
+      }
+      .lang-toggle {
+        padding: 4px 12px;
+        font-size: var(--text-sm);
+        background: transparent;
+        border: 1px solid var(--color-border-strong);
+        border-radius: var(--radius-sm);
+        cursor: pointer;
+      }
+
+      /* Stepper */
+      .stepper {
+        display: flex;
+        align-items: center;
+        gap: var(--space-6);
+        padding: 16px 24px;
+        border-bottom: 1px solid var(--color-border);
+        list-style: none;
+      }
+      .stepper li {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .step-dot {
+        width: 28px;
+        height: 28px;
+        border-radius: var(--radius-full);
+        display: grid;
+        place-items: center;
+        font-weight: 700;
+        font-size: var(--text-sm);
+      }
+      .step-dot.done {
+        background: var(--color-success-600);
+        color: white;
+      }
+      .step-dot.active {
+        background: var(--color-primary);
+        color: white;
+      }
+      .step-dot.future {
+        background: transparent;
+        color: var(--color-text-muted);
+        border: 1.5px solid var(--color-border-strong);
+      }
+      .step-label {
+        font-size: var(--text-sm);
+      }
+      .step-label.active {
+        color: var(--color-text);
+        font-weight: 600;
+      }
+      .step-label.muted {
+        color: var(--color-text-muted);
+      }
+
+      main {
+        flex: 1;
+        padding: 24px;
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+      }
+      h1 {
+        font-size: var(--text-2xl);
+        font-weight: 700;
+      }
+      .hint {
+        color: var(--color-text-muted);
+        font-size: var(--text-sm);
+      }
+
+      /* Video preview */
+      .preview {
+        background: #1a1a1a;
+        aspect-ratio: 16 / 9;
+        border-radius: var(--radius-md);
+        display: grid;
+        place-items: center;
+        position: relative;
+        overflow: hidden;
+      }
+      .preview::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background:
+          radial-gradient(circle at 30% 40%, rgba(99, 102, 241, 0.18), transparent 55%),
+          radial-gradient(circle at 70% 60%, rgba(14, 165, 233, 0.15), transparent 50%),
+          linear-gradient(180deg, #2a2a2a 0%, #111 100%);
+      }
+      .play-btn {
+        position: relative;
+        z-index: 1;
+        width: 64px;
+        height: 64px;
+        border-radius: var(--radius-full);
+        background: rgba(255, 255, 255, 0.92);
+        color: #111;
+        border: none;
+        font-size: 24px;
+        display: grid;
+        place-items: center;
+        cursor: pointer;
+        transition: all 0.15s ease;
+      }
+      .play-btn:hover {
+        transform: scale(1.05);
+        background: white;
+      }
+
+      /* ───── Timeline common ─────────────────────────────────────── */
+      .time-ruler {
+        display: flex;
+        justify-content: space-between;
+        padding: 0 2px;
+        font-size: var(--text-xs);
+        color: var(--color-text-muted);
+        font-variant-numeric: tabular-nums;
+      }
+      .timeline-wrap {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .timeline-track {
+        position: relative;
+        display: flex;
+        align-items: stretch;
+        background: var(--color-bg);
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-sm);
+        height: 72px;
+        overflow: hidden;
+      }
+
+      /* Side anchors (brand-blue, from sketch 001) */
+      .side-anchor {
+        width: 12px;
+        background: var(--color-anchor-fill);
+        position: relative;
+        cursor: ew-resize;
+        z-index: 2;
+        display: grid;
+        place-items: center;
+        flex-shrink: 0;
+      }
+      .side-anchor::before,
+      .side-anchor::after {
+        content: '';
+        position: absolute;
+        width: 2px;
+        height: 18px;
+        background: var(--color-anchor-grip);
+        border-radius: 1px;
+      }
+      .side-anchor::before {
+        left: 3px;
+      }
+      .side-anchor::after {
+        right: 3px;
+      }
+      .side-anchor:hover {
+        background: var(--color-brand-700);
+      }
+
+      .timeline-content {
+        flex: 1;
+        position: relative;
+        overflow: hidden;
+      }
+
+      /* Dynamic track (from sketch 001 winner D) */
+      .track-dynamic {
+        height: 100%;
+        position: relative;
+        background: linear-gradient(180deg, var(--color-brand-100), var(--color-brand-50));
+      }
+      .track-dynamic .wave-overlay {
+        position: absolute;
+        inset: 6px 4px;
+        display: flex;
+        align-items: center;
+        gap: 2px;
+      }
+      .track-dynamic .wave-overlay .wave-bar {
+        flex: 1;
+        background: linear-gradient(180deg, rgba(37, 99, 235, 0.55), rgba(29, 78, 216, 0.42));
+        border-radius: 1px;
+        min-width: 2px;
+      }
+
+      /* Playhead */
+      .playhead {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: 2px;
+        background: white;
+        box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4);
+        z-index: 4;
+        pointer-events: none;
+      }
+      .playhead::before {
+        content: '';
+        position: absolute;
+        top: -4px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 10px;
+        height: 10px;
+        background: white;
+        border: 1px solid rgba(0, 0, 0, 0.4);
+        border-radius: 50%;
+      }
+
+      /* ═════════════════════════════════════════════════════════════
+       * CUT REGIONS — varies per variant
+       * ═════════════════════════════════════════════════════════════ */
+
+      .cut-region {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        pointer-events: none;
+        z-index: 2;
+      }
+
+      /* Variant A: red semi-transparent overlay — ACCESSIBILITY REFINED
+       * WCAG 1.4.1: color alone cannot be the only signal. Changes from the
+       * first draft:
+       *   - Added a subtle diagonal micro-stripe pattern at 8% white alpha,
+       *     overlaid on the red fill. Barely visible to color-sighted users
+       *     (reads as a soft texture) but clearly perceptible to users with
+       *     protanopia/deuteranopia where the red itself desaturates toward
+       *     brown. The pattern serves as a non-color "this region is
+       *     special" cue.
+       *   - Border darkened from #dc2626 → #991b1b for stronger contrast
+       *     across color-vision modes; 3px thick (was 2px) so it survives
+       *     even when red washes toward beige.
+       */
+      .cut-region.var-a {
+        background-color: rgba(220, 38, 38, 0.38);
+        background-image: repeating-linear-gradient(
+          135deg,
+          rgba(255, 255, 255, 0.1) 0,
+          rgba(255, 255, 255, 0.1) 2px,
+          transparent 2px,
+          transparent 9px
+        );
+        box-shadow:
+          inset 3px 0 0 #991b1b,
+          inset -3px 0 0 #991b1b;
+      }
+
+      /* Variant B: diagonal stripes (unambiguous "void" / "removed" pattern) */
+      .cut-region.var-b {
+        background: repeating-linear-gradient(
+          135deg,
+          rgba(220, 38, 38, 0.5) 0,
+          rgba(220, 38, 38, 0.5) 4px,
+          rgba(220, 38, 38, 0.15) 4px,
+          rgba(220, 38, 38, 0.15) 8px
+        );
+        box-shadow:
+          inset 2px 0 0 var(--color-cut-edge-handle),
+          inset -2px 0 0 var(--color-cut-edge-handle);
+      }
+
+      /* Variant C: desaturate — what remains is vivid, what's gone is gray */
+      .cut-region.var-c {
+        background: rgba(255, 255, 255, 0.65);
+        backdrop-filter: grayscale(1) brightness(1.05);
+        -webkit-backdrop-filter: grayscale(1) brightness(1.05);
+        border-left: 2px dashed var(--color-cut-edge-handle);
+        border-right: 2px dashed var(--color-cut-edge-handle);
+      }
+
+      /* Cut-edge handles — visually distinct from brand-blue side anchors.
+       * ACCESSIBILITY: shape-level distinction, not just color.
+       *   - Side anchors (unchanged): two VERTICAL white grip lines
+       *   - Cut handles (updated): two HORIZONTAL white grip lines
+       * A color-blind user perceives "these are different control types"
+       * even if red and blue collapse to similar brownish shades. The
+       * horizontal-vs-vertical grip pattern is the non-color cue.
+       * Handle background darkened from #b91c1c → #991b1b for stronger
+       * contrast across protanopia/deuteranopia modes. */
+      .cut-handle {
+        position: absolute;
+        top: -3px;
+        bottom: -3px;
+        width: 10px;
+        background: #991b1b;
+        border: 1px solid white;
+        border-radius: 2px;
+        cursor: ew-resize;
+        z-index: 3;
+        pointer-events: auto;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 3px;
+      }
+      /* Two horizontal grip lines — contrast with anchor's two vertical ones */
+      .cut-handle::before,
+      .cut-handle::after {
+        content: '';
+        width: 6px;
+        height: 1.5px;
+        background: white;
+        border-radius: 1px;
+      }
+      .cut-handle.left {
+        left: -5px;
+      }
+      .cut-handle.right {
+        right: -5px;
+      }
+      .cut-handle:hover {
+        background: #7f1d1d;
+      }
+
+      /* Cut label — time-duration badge with semantic scissors icon
+       * prefix. The ✂ character is a non-color cue that reads as
+       * "cut / removed" to screen readers and color-blind users. */
+      .cut-label {
+        position: absolute;
+        top: -22px;
+        left: 50%;
+        transform: translateX(-50%);
+        padding: 2px 7px;
+        font-size: var(--text-xs);
+        background: #991b1b;
+        color: white;
+        border-radius: var(--radius-sm);
+        white-space: nowrap;
+        pointer-events: none;
+        font-variant-numeric: tabular-nums;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+      }
+      .cut-label::before {
+        content: '✂';
+        font-size: 11px;
+        line-height: 1;
+      }
+
+      /* Playback row */
+      .playback-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 4px 2px;
+      }
+      .playback-controls {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .ctl-btn {
+        width: 34px;
+        height: 34px;
+        border-radius: var(--radius-full);
+        border: 1px solid var(--color-border-strong);
+        background: var(--color-surface);
+        display: grid;
+        place-items: center;
+        cursor: pointer;
+        font-size: 13px;
+        color: var(--color-text-body);
+        transition: all 0.15s ease;
+      }
+      .ctl-btn:hover {
+        background: var(--color-bg);
+        border-color: var(--color-text-muted);
+      }
+      .ctl-btn.primary {
+        background: var(--color-primary);
+        color: white;
+        border-color: var(--color-primary);
+        width: 42px;
+        height: 42px;
+        font-size: 16px;
+      }
+      .ctl-btn.primary:hover {
+        background: var(--color-primary-hover);
+      }
+      .time-display {
+        font: 500 var(--text-sm) var(--font-mono);
+        color: var(--color-text-body);
+        font-variant-numeric: tabular-nums;
+      }
+
+      /* Summary chip under the timeline — shows net result */
+      .cuts-summary {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: var(--text-sm);
+        color: var(--color-text-body);
+        padding: 6px 10px;
+        background: var(--color-brand-50);
+        border-left: 3px solid var(--color-brand-600);
+        border-radius: var(--radius-sm);
+        margin-top: 4px;
+      }
+      .cuts-summary .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--color-cut-edge-handle);
+      }
+
+      /* Footer */
+      .app-footer {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 16px 24px;
+        border-top: 1px solid var(--color-border);
+        background: var(--color-surface);
+      }
+      .btn {
+        padding: 8px 16px;
+        border-radius: var(--radius-sm);
+        font: 500 var(--text-sm) var(--font-sans);
+        cursor: pointer;
+        border: 1px solid var(--color-border-strong);
+        background: var(--color-surface);
+        color: var(--color-text);
+        transition: all 0.15s ease;
+      }
+      .btn:hover {
+        background: var(--color-bg);
+      }
+      .btn-primary {
+        margin-left: auto;
+        background: var(--color-primary);
+        color: white;
+        border-color: var(--color-primary);
+        font-weight: 700;
+      }
+      .btn-primary:hover {
+        background: var(--color-primary-hover);
+      }
+
+      /* Sketch toolbar */
+      #sketch-tools {
+        position: fixed;
+        bottom: 12px;
+        right: 12px;
+        z-index: 9999;
+        font: 500 12px var(--font-sans);
+        background: rgba(0, 0, 0, 0.78);
+        color: white;
+        padding: 8px 10px;
+        border-radius: 8px;
+        opacity: 0.35;
+        transition: opacity 0.2s;
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+      #sketch-tools:hover {
+        opacity: 1;
+      }
+      #sketch-tools select {
+        font: 500 11px var(--font-sans);
+        background: rgba(255, 255, 255, 0.1);
+        color: white;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 4px;
+        padding: 3px 6px;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- ───── Variant nav ────────────────────────────────────────── -->
+    <nav id="variant-nav" role="tablist">
+      <button class="variant-tab active" onclick="showVariant('a', this)">
+        A: Red overlay ★ Selected (a11y-refined)
+      </button>
+      <button class="variant-tab" onclick="showVariant('b', this)">B: Diagonal stripes</button>
+      <button class="variant-tab" onclick="showVariant('c', this)">
+        C: Desaturate (gray vs color)
+      </button>
+    </nav>
+
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <!-- Shared template rendered per variant via JS — cut overlays   -->
+    <!-- differ only by CSS class (var-a / var-b / var-c).           -->
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <template id="app-template">
+      <div class="app">
+        <header class="app-header">
+          <div class="app-title">EasyClip</div>
+          <button class="lang-toggle">עברית</button>
+        </header>
+        <ol class="stepper">
+          <li>
+            <span class="step-dot done">✓</span><span class="step-label muted">Pick a file</span>
+          </li>
+          <li>
+            <span class="step-dot active">2</span
+            ><span class="step-label active">Edit your clip</span>
+          </li>
+          <li>
+            <span class="step-dot future">3</span><span class="step-label muted">Trimming</span>
+          </li>
+          <li><span class="step-dot future">4</span><span class="step-label muted">Done</span></li>
+        </ol>
+        <main>
+          <div>
+            <h1>Edit your clip</h1>
+            <p class="hint">
+              The blue bars on the edges are the <strong>trim handles</strong> — drag them to cut
+              the beginning or end. The red regions are <strong>middle cuts</strong> — those
+              sections will be removed. Hover the timeline and click to start a new cut.
+            </p>
+          </div>
+
+          <div class="preview">
+            <button class="play-btn" aria-label="Play">▶</button>
+          </div>
+
+          <div class="timeline-wrap">
+            <div class="time-ruler">
+              <span>0:00</span><span>0:30</span><span>1:00</span><span>1:30</span><span>2:00</span>
+            </div>
+            <div class="timeline-track">
+              <div class="side-anchor" aria-label="Trim start"></div>
+              <div class="timeline-content">
+                <div class="track-dynamic">
+                  <div class="wave-overlay"></div>
+                </div>
+                <!-- Two middle cuts placed at:
+                     cut 1: 0:50 → 1:05 (25% → 42%, span 17%)
+                     cut 2: 1:30 → 1:45 (62% → 77%, span 15%) -->
+                <div class="cut-region VARIANT_CLASS" style="left: 25%; width: 17%">
+                  <div class="cut-label">0:50 → 1:05 (–15s)</div>
+                  <div class="cut-handle left" aria-label="Cut start"></div>
+                  <div class="cut-handle right" aria-label="Cut end"></div>
+                </div>
+                <div class="cut-region VARIANT_CLASS" style="left: 62%; width: 15%">
+                  <div class="cut-label">1:30 → 1:45 (–15s)</div>
+                  <div class="cut-handle left"></div>
+                  <div class="cut-handle right"></div>
+                </div>
+                <div class="playhead" style="left: 50%"></div>
+              </div>
+              <div class="side-anchor" aria-label="Trim end"></div>
+            </div>
+            <div class="playback-row">
+              <div class="playback-controls">
+                <button class="ctl-btn">⏮</button>
+                <button class="ctl-btn primary">▶</button>
+                <button class="ctl-btn">⏭</button>
+              </div>
+              <div class="time-display">0:37 / 2:00</div>
+            </div>
+            <div class="cuts-summary">
+              <span class="dot"></span>
+              <span
+                ><strong>2 cuts</strong> — removing 30 seconds. Final clip:
+                <strong>1:30</strong>.</span
+              >
+            </div>
+          </div>
+        </main>
+        <footer class="app-footer">
+          <button class="btn">Back</button>
+          <button class="btn">Start over</button>
+          <button class="btn btn-primary">Continue</button>
+        </footer>
+      </div>
+    </template>
+
+    <div class="variant active" id="variant-a"></div>
+    <div class="variant" id="variant-b"></div>
+    <div class="variant" id="variant-c"></div>
+
+    <!-- Sketch toolbar -->
+    <div id="sketch-tools">
+      <span>Sketch 002</span>
+      <select
+        onchange="
+          document.querySelector('link[href*=themes]').href = '../themes/' + this.value + '.css'
+        "
+      >
+        <option value="default">Default</option>
+      </select>
+    </div>
+
+    <script>
+      /* Render the shared template into each variant container with the
+       * variant-specific cut-region class. Keeps the three variants in
+       * perfect sync — any change to the template body propagates to all. */
+      const template = document.getElementById('app-template').innerHTML;
+      const fills = { a: 'var-a', b: 'var-b', c: 'var-c' };
+      for (const [letter, cls] of Object.entries(fills)) {
+        const container = document.getElementById('variant-' + letter);
+        container.innerHTML = template.replaceAll('VARIANT_CLASS', cls);
+      }
+
+      /* Populate the waveform overlay in every variant (80 bars each,
+       * matching sketch 001's winning D treatment). */
+      function fillWaveform(container, barCount) {
+        for (let i = 0; i < barCount; i++) {
+          const t = i / barCount;
+          const envelope = Math.sin(t * Math.PI) * 0.8 + Math.sin(t * Math.PI * 3) * 0.15 + 0.1;
+          const noise = (Math.sin(i * 7.3) + Math.sin(i * 2.1)) * 0.1;
+          const amp = Math.max(0.1, Math.min(0.95, envelope + noise));
+          const bar = document.createElement('div');
+          bar.className = 'wave-bar';
+          bar.style.height = `${amp * 100}%`;
+          container.appendChild(bar);
+        }
+      }
+      document.querySelectorAll('.wave-overlay').forEach((el) => fillWaveform(el, 80));
+
+      /* Variant switcher */
+      function showVariant(id, tab) {
+        document.querySelectorAll('.variant').forEach((v) => {
+          v.classList.remove('active');
+          v.style.display = 'none';
+        });
+        document.querySelectorAll('.variant-tab').forEach((t) => t.classList.remove('active'));
+        document.getElementById('variant-' + id).classList.add('active');
+        document.getElementById('variant-' + id).style.display = 'block';
+        tab.classList.add('active');
+      }
+
+      /* Play button toggle */
+      document.querySelectorAll('.play-btn, .ctl-btn.primary').forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+          const b = e.currentTarget;
+          b.textContent = b.textContent === '▶' ? '⏸' : '▶';
+        });
+      });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,937 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sketch 003: Merge-Prompt — Overlap Confirmation UI</title>
+    <link rel="stylesheet" href="../themes/default.css" />
+    <style>
+      /* ───── Reset + base ─────────────────────────────────────────── */
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        font-family: var(--font-sans);
+        background: var(--color-bg);
+        color: var(--color-text);
+        padding-top: 52px;
+      }
+
+      /* ───── Variant nav ──────────────────────────────────────────── */
+      #variant-nav {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 9998;
+        background: var(--color-surface);
+        border-bottom: 1px solid var(--color-border);
+        padding: 8px 16px;
+        display: flex;
+        gap: 6px;
+      }
+      .variant-tab {
+        padding: 6px 14px;
+        font: 500 var(--text-sm) var(--font-sans);
+        background: transparent;
+        border: 1px solid var(--color-border-strong);
+        border-radius: var(--radius-sm);
+        color: var(--color-text-body);
+        cursor: pointer;
+        transition: all 0.15s ease;
+      }
+      .variant-tab:hover {
+        background: var(--color-bg);
+      }
+      .variant-tab.active {
+        background: var(--color-primary);
+        color: white;
+        border-color: var(--color-primary);
+      }
+      .variant {
+        display: none;
+      }
+      .variant.active {
+        display: block;
+      }
+
+      /* App shell (inherited from sketches 001/002 winners) */
+      .app {
+        max-width: 1100px;
+        margin: 0 auto;
+        background: var(--color-surface);
+        min-height: calc(100vh - 52px);
+        display: flex;
+        flex-direction: column;
+        border-left: 1px solid var(--color-border);
+        border-right: 1px solid var(--color-border);
+      }
+      .app-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px 24px;
+        border-bottom: 1px solid var(--color-border);
+      }
+      .app-title {
+        font-weight: 700;
+        font-size: var(--text-base);
+      }
+      .lang-toggle {
+        padding: 4px 12px;
+        font-size: var(--text-sm);
+        background: transparent;
+        border: 1px solid var(--color-border-strong);
+        border-radius: var(--radius-sm);
+        cursor: pointer;
+      }
+      .stepper {
+        display: flex;
+        align-items: center;
+        gap: var(--space-6);
+        padding: 16px 24px;
+        border-bottom: 1px solid var(--color-border);
+        list-style: none;
+      }
+      .stepper li {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .step-dot {
+        width: 28px;
+        height: 28px;
+        border-radius: var(--radius-full);
+        display: grid;
+        place-items: center;
+        font-weight: 700;
+        font-size: var(--text-sm);
+      }
+      .step-dot.done {
+        background: var(--color-success-600);
+        color: white;
+      }
+      .step-dot.active {
+        background: var(--color-primary);
+        color: white;
+      }
+      .step-dot.future {
+        background: transparent;
+        color: var(--color-text-muted);
+        border: 1.5px solid var(--color-border-strong);
+      }
+      .step-label {
+        font-size: var(--text-sm);
+      }
+      .step-label.active {
+        color: var(--color-text);
+        font-weight: 600;
+      }
+      .step-label.muted {
+        color: var(--color-text-muted);
+      }
+
+      main {
+        flex: 1;
+        padding: 24px;
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+        position: relative;
+      }
+      h1 {
+        font-size: var(--text-2xl);
+        font-weight: 700;
+      }
+      .hint {
+        color: var(--color-text-muted);
+        font-size: var(--text-sm);
+      }
+      .preview {
+        background: #1a1a1a;
+        aspect-ratio: 16 / 9;
+        border-radius: var(--radius-md);
+        display: grid;
+        place-items: center;
+        position: relative;
+        overflow: hidden;
+      }
+      .preview::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background:
+          radial-gradient(circle at 30% 40%, rgba(99, 102, 241, 0.18), transparent 55%),
+          radial-gradient(circle at 70% 60%, rgba(14, 165, 233, 0.15), transparent 50%),
+          linear-gradient(180deg, #2a2a2a 0%, #111 100%);
+      }
+      .play-btn {
+        position: relative;
+        z-index: 1;
+        width: 64px;
+        height: 64px;
+        border-radius: var(--radius-full);
+        background: rgba(255, 255, 255, 0.92);
+        color: #111;
+        border: none;
+        font-size: 24px;
+        display: grid;
+        place-items: center;
+        cursor: pointer;
+        transition: all 0.15s ease;
+      }
+      .play-btn:hover {
+        transform: scale(1.05);
+        background: white;
+      }
+
+      /* ───── Timeline common (from sketches 001+002) ───────────── */
+      .time-ruler {
+        display: flex;
+        justify-content: space-between;
+        padding: 0 2px;
+        font-size: var(--text-xs);
+        color: var(--color-text-muted);
+        font-variant-numeric: tabular-nums;
+      }
+      .timeline-wrap {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        position: relative;
+      }
+      .timeline-track {
+        position: relative;
+        display: flex;
+        align-items: stretch;
+        background: var(--color-bg);
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-sm);
+        height: 72px;
+      }
+      .side-anchor {
+        width: 12px;
+        background: var(--color-anchor-fill);
+        position: relative;
+        cursor: ew-resize;
+        z-index: 2;
+        display: grid;
+        place-items: center;
+        flex-shrink: 0;
+      }
+      .side-anchor::before,
+      .side-anchor::after {
+        content: '';
+        position: absolute;
+        width: 2px;
+        height: 18px;
+        background: var(--color-anchor-grip);
+        border-radius: 1px;
+      }
+      .side-anchor::before {
+        left: 3px;
+      }
+      .side-anchor::after {
+        right: 3px;
+      }
+      .timeline-content {
+        flex: 1;
+        position: relative;
+      }
+      .track-dynamic {
+        height: 100%;
+        position: relative;
+        background: linear-gradient(180deg, var(--color-brand-100), var(--color-brand-50));
+      }
+      .track-dynamic .wave-overlay {
+        position: absolute;
+        inset: 6px 4px;
+        display: flex;
+        align-items: center;
+        gap: 2px;
+      }
+      .track-dynamic .wave-overlay .wave-bar {
+        flex: 1;
+        background: linear-gradient(180deg, rgba(37, 99, 235, 0.55), rgba(29, 78, 216, 0.42));
+        border-radius: 1px;
+        min-width: 2px;
+      }
+      .playhead {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: 2px;
+        background: white;
+        box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4);
+        z-index: 4;
+        pointer-events: none;
+      }
+      .playhead::before {
+        content: '';
+        position: absolute;
+        top: -4px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 10px;
+        height: 10px;
+        background: white;
+        border: 1px solid rgba(0, 0, 0, 0.4);
+        border-radius: 50%;
+      }
+
+      /* Cut regions — inheriting sketch 002 winner (A, a11y-refined) */
+      .cut-region {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        pointer-events: none;
+        z-index: 2;
+        background-color: rgba(220, 38, 38, 0.38);
+        background-image: repeating-linear-gradient(
+          135deg,
+          rgba(255, 255, 255, 0.1) 0,
+          rgba(255, 255, 255, 0.1) 2px,
+          transparent 2px,
+          transparent 9px
+        );
+        box-shadow:
+          inset 3px 0 0 #991b1b,
+          inset -3px 0 0 #991b1b;
+      }
+      /* The "pending" new cut — dashed borders + slight opacity so user reads
+         it as "not yet committed." */
+      .cut-region.pending {
+        background-color: rgba(220, 38, 38, 0.28);
+        box-shadow: none;
+        outline: 2px dashed #991b1b;
+        outline-offset: -2px;
+        z-index: 3;
+      }
+      .cut-handle {
+        position: absolute;
+        top: -3px;
+        bottom: -3px;
+        width: 10px;
+        background: #991b1b;
+        border: 1px solid white;
+        border-radius: 2px;
+        cursor: ew-resize;
+        z-index: 3;
+        pointer-events: auto;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 3px;
+      }
+      .cut-handle::before,
+      .cut-handle::after {
+        content: '';
+        width: 6px;
+        height: 1.5px;
+        background: white;
+        border-radius: 1px;
+      }
+      .cut-handle.left {
+        left: -5px;
+      }
+      .cut-handle.right {
+        right: -5px;
+      }
+      .cut-label {
+        position: absolute;
+        top: -22px;
+        left: 50%;
+        transform: translateX(-50%);
+        padding: 2px 7px;
+        font-size: var(--text-xs);
+        background: #991b1b;
+        color: white;
+        border-radius: var(--radius-sm);
+        white-space: nowrap;
+        pointer-events: none;
+        font-variant-numeric: tabular-nums;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+      }
+      .cut-label::before {
+        content: '✂';
+        font-size: 11px;
+        line-height: 1;
+      }
+
+      /* ═════════════════════════════════════════════════════════════
+       * MERGE PROMPT — varies per variant
+       * ═════════════════════════════════════════════════════════════ */
+
+      .merge-prompt-base {
+        background: var(--color-surface);
+        border: 1px solid var(--color-border-strong);
+        border-radius: var(--radius-md);
+        box-shadow: var(--shadow-lg);
+        padding: 12px 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        min-width: 260px;
+        max-width: 320px;
+        z-index: 50;
+      }
+      .prompt-text {
+        font-size: var(--text-sm);
+        color: var(--color-text);
+        line-height: 1.4;
+      }
+      .prompt-text strong {
+        font-weight: 700;
+      }
+      .prompt-buttons {
+        display: flex;
+        gap: 8px;
+        justify-content: flex-end;
+      }
+      .prompt-btn {
+        padding: 5px 12px;
+        font: 500 var(--text-sm) var(--font-sans);
+        border-radius: var(--radius-sm);
+        cursor: pointer;
+        transition: all 0.15s ease;
+      }
+      .prompt-btn.cancel {
+        background: var(--color-surface);
+        border: 1px solid var(--color-border-strong);
+        color: var(--color-text-body);
+      }
+      .prompt-btn.cancel:hover {
+        background: var(--color-bg);
+      }
+      .prompt-btn.confirm {
+        background: #991b1b;
+        color: white;
+        border: 1px solid #991b1b;
+        font-weight: 700;
+      }
+      .prompt-btn.confirm:hover {
+        background: #7f1d1d;
+        border-color: #7f1d1d;
+      }
+
+      /* Variant A — inline floating tooltip near cursor (above new cut's right edge) */
+      .prompt-a {
+        position: absolute;
+        bottom: calc(100% + 14px); /* anchored above the timeline-track */
+        left: 49%; /* near the cursor / right edge of pending cut */
+        transform: translateX(-50%);
+        animation: popIn 0.18s ease-out;
+      }
+      .prompt-a::after {
+        content: '';
+        position: absolute;
+        bottom: -7px;
+        left: 50%;
+        transform: translateX(-50%) rotate(45deg);
+        width: 12px;
+        height: 12px;
+        background: var(--color-surface);
+        border-right: 1px solid var(--color-border-strong);
+        border-bottom: 1px solid var(--color-border-strong);
+      }
+
+      /* Variant B — popover anchored TO the overlap region, pointing down to it */
+      .prompt-b {
+        position: absolute;
+        bottom: calc(100% + 16px);
+        left: 35%; /* centered on the overlap (30% - 40% range) */
+        transform: translateX(-50%);
+        animation: popIn 0.18s ease-out;
+      }
+      .prompt-b::after {
+        content: '';
+        position: absolute;
+        bottom: -7px;
+        left: 50%;
+        transform: translateX(-50%) rotate(45deg);
+        width: 12px;
+        height: 12px;
+        background: var(--color-surface);
+        border-right: 1px solid var(--color-border-strong);
+        border-bottom: 1px solid var(--color-border-strong);
+      }
+      /* Highlight indicator showing which overlap triggered the prompt */
+      .overlap-highlight {
+        position: absolute;
+        top: -5px;
+        bottom: -5px;
+        background: rgba(217, 119, 6, 0.2); /* amber */
+        border: 2px solid var(--color-warning-600);
+        border-radius: 2px;
+        z-index: 5;
+        pointer-events: none;
+      }
+
+      /* Variant C — bottom-of-screen toast (inside app shell, above footer) */
+      .prompt-c {
+        position: sticky;
+        bottom: 0;
+        margin: 16px -24px -24px; /* extend to app edges */
+        padding: 12px 24px;
+        background: var(--color-surface);
+        border-top: 1px solid var(--color-border-strong);
+        box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.08);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        animation: slideUp 0.22s ease-out;
+        z-index: 50;
+      }
+      .prompt-c .prompt-text {
+        flex: 1;
+      }
+      .prompt-c .prompt-buttons {
+        flex-shrink: 0;
+      }
+
+      @keyframes popIn {
+        from {
+          opacity: 0;
+          transform: translateX(-50%) scale(0.94);
+        }
+        to {
+          opacity: 1;
+          transform: translateX(-50%) scale(1);
+        }
+      }
+      @keyframes slideUp {
+        from {
+          opacity: 0;
+          transform: translateY(8px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      /* Playback row */
+      .playback-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 4px 2px;
+      }
+      .playback-controls {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .ctl-btn {
+        width: 34px;
+        height: 34px;
+        border-radius: var(--radius-full);
+        border: 1px solid var(--color-border-strong);
+        background: var(--color-surface);
+        display: grid;
+        place-items: center;
+        cursor: pointer;
+        font-size: 13px;
+        color: var(--color-text-body);
+        transition: all 0.15s ease;
+      }
+      .ctl-btn.primary {
+        background: var(--color-primary);
+        color: white;
+        border-color: var(--color-primary);
+        width: 42px;
+        height: 42px;
+        font-size: 16px;
+      }
+      .time-display {
+        font: 500 var(--text-sm) var(--font-mono);
+        color: var(--color-text-body);
+        font-variant-numeric: tabular-nums;
+      }
+
+      /* Footer */
+      .app-footer {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 16px 24px;
+        border-top: 1px solid var(--color-border);
+        background: var(--color-surface);
+      }
+      .btn {
+        padding: 8px 16px;
+        border-radius: var(--radius-sm);
+        font: 500 var(--text-sm) var(--font-sans);
+        cursor: pointer;
+        border: 1px solid var(--color-border-strong);
+        background: var(--color-surface);
+        color: var(--color-text);
+        transition: all 0.15s ease;
+      }
+      .btn:hover {
+        background: var(--color-bg);
+      }
+      .btn-primary {
+        margin-left: auto;
+        background: var(--color-primary);
+        color: white;
+        border-color: var(--color-primary);
+        font-weight: 700;
+      }
+
+      /* State-cycling demo controls */
+      .demo-controls {
+        display: flex;
+        gap: 6px;
+        font-size: var(--text-xs);
+        color: var(--color-text-muted);
+        align-items: center;
+        margin-bottom: -4px;
+      }
+      .demo-controls button {
+        padding: 3px 10px;
+        font-size: var(--text-xs);
+        background: var(--color-bg);
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-sm);
+        cursor: pointer;
+        color: var(--color-text-body);
+        transition: all 0.15s ease;
+      }
+      .demo-controls button.on {
+        background: var(--color-brand-50);
+        border-color: var(--color-brand-600);
+        color: var(--color-brand-700);
+        font-weight: 600;
+      }
+
+      /* State-dependent visibility.
+       *
+       * Default (no state class): existing cut + pending cut both visible,
+       *   prompt + overlap highlight visible, merged cut hidden.
+       * state-merged: existing and pending both hidden (the merged cut
+       *   replaces them); prompt + overlap hidden; merged cut shown.
+       * state-cancelled: pending cut + prompt + overlap all hidden;
+       *   existing cut stays; merged cut hidden. */
+      .variant .cut-region.merged {
+        display: none;
+      }
+      .variant.state-merged .cut-region:not(.merged),
+      .variant.state-merged .merge-prompt,
+      .variant.state-merged .overlap-highlight {
+        display: none;
+      }
+      .variant.state-merged .cut-region.merged {
+        display: block;
+      }
+      .variant.state-cancelled .cut-region.pending,
+      .variant.state-cancelled .cut-region.merged,
+      .variant.state-cancelled .merge-prompt,
+      .variant.state-cancelled .overlap-highlight {
+        display: none;
+      }
+
+      /* Sketch toolbar */
+      #sketch-tools {
+        position: fixed;
+        bottom: 12px;
+        right: 12px;
+        z-index: 9999;
+        font: 500 12px var(--font-sans);
+        background: rgba(0, 0, 0, 0.78);
+        color: white;
+        padding: 8px 10px;
+        border-radius: 8px;
+        opacity: 0.35;
+        transition: opacity 0.2s;
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+      #sketch-tools:hover {
+        opacity: 1;
+      }
+      #sketch-tools select {
+        font: 500 11px var(--font-sans);
+        background: rgba(255, 255, 255, 0.1);
+        color: white;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 4px;
+        padding: 3px 6px;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <nav id="variant-nav">
+      <button class="variant-tab active" onclick="showVariant('a', this)">
+        A: Inline tooltip ★ Selected
+      </button>
+      <button class="variant-tab" onclick="showVariant('b', this)">
+        B: Overlap-anchored popover
+      </button>
+      <button class="variant-tab" onclick="showVariant('c', this)">C: Bottom toast</button>
+    </nav>
+
+    <!-- Shared app template -->
+    <template id="app-template">
+      <div class="app">
+        <header class="app-header">
+          <div class="app-title">EasyClip</div>
+          <button class="lang-toggle">עברית</button>
+        </header>
+        <ol class="stepper">
+          <li>
+            <span class="step-dot done">✓</span><span class="step-label muted">Pick a file</span>
+          </li>
+          <li>
+            <span class="step-dot active">2</span
+            ><span class="step-label active">Edit your clip</span>
+          </li>
+          <li>
+            <span class="step-dot future">3</span><span class="step-label muted">Trimming</span>
+          </li>
+          <li><span class="step-dot future">4</span><span class="step-label muted">Done</span></li>
+        </ol>
+        <main>
+          <div>
+            <h1>Edit your clip</h1>
+            <p class="hint">
+              Your new cut overlaps an existing cut. <strong>Decide: merge them into one,</strong>
+              or cancel and keep them separate. (If the file has no audio, the waveform overlay is
+              hidden automatically.)
+            </p>
+          </div>
+
+          <div class="demo-controls">
+            <span>Demo state →</span>
+            <button class="on" onclick="setState(this, '')">1. Prompt showing</button>
+            <button onclick="setState(this, 'merged')">2. After merge</button>
+            <button onclick="setState(this, 'cancelled')">3. After cancel</button>
+          </div>
+
+          <div class="preview">
+            <button class="play-btn">▶</button>
+          </div>
+
+          <div class="timeline-wrap">
+            <div class="time-ruler">
+              <span>0:00</span><span>0:30</span><span>1:00</span><span>1:30</span><span>2:00</span>
+            </div>
+            <div class="timeline-track">
+              <div class="side-anchor"></div>
+              <div class="timeline-content" id="tc-CONTENT_ID">
+                <div class="track-dynamic"><div class="wave-overlay"></div></div>
+
+                <!-- Existing cut at 25% → 40% (0:50 → 1:20) -->
+                <div class="cut-region" style="left: 25%; width: 15%">
+                  <div class="cut-label">✂ 0:50 → 1:20</div>
+                  <div class="cut-handle left"></div>
+                  <div class="cut-handle right"></div>
+                </div>
+
+                <!-- Pending new cut at 35% → 52% (1:10 → 1:42). Overlaps existing by 5 percentage points. -->
+                <div class="cut-region pending" style="left: 35%; width: 17%">
+                  <div class="cut-label">✂ 1:10 → 1:42 (new)</div>
+                  <div class="cut-handle left"></div>
+                  <div class="cut-handle right"></div>
+                </div>
+
+                <!-- Merged cut (only shown in state-merged): 0:50 → 1:42 = 25% → 52% -->
+                <div class="cut-region merged" style="left: 25%; width: 27%">
+                  <div class="cut-label">✂ 0:50 → 1:42 (merged, –52s)</div>
+                  <div class="cut-handle left"></div>
+                  <div class="cut-handle right"></div>
+                </div>
+
+                <!-- Overlap highlight for variant B (35% → 40%) -->
+                <div
+                  class="overlap-highlight prompt-b-highlight"
+                  style="left: 35%; width: 5%"
+                ></div>
+
+                <div class="playhead" style="left: 40%"></div>
+
+                <!-- VARIANT-SPECIFIC PROMPT SLOT — rendered inline by JS per variant -->
+              </div>
+              <div class="side-anchor"></div>
+            </div>
+            <div class="playback-row">
+              <div class="playback-controls">
+                <button class="ctl-btn">⏮</button>
+                <button class="ctl-btn primary">▶</button>
+                <button class="ctl-btn">⏭</button>
+              </div>
+              <div class="time-display">1:08 / 2:00</div>
+            </div>
+          </div>
+
+          <!-- Variant C toast slot — rendered outside timeline -->
+          <div class="c-toast-slot"></div>
+        </main>
+        <footer class="app-footer">
+          <button class="btn">Back</button>
+          <button class="btn">Start over</button>
+          <button class="btn btn-primary">Continue</button>
+        </footer>
+      </div>
+    </template>
+
+    <div class="variant active" id="variant-a"></div>
+    <div class="variant" id="variant-b"></div>
+    <div class="variant" id="variant-c"></div>
+
+    <div id="sketch-tools">
+      <span>Sketch 003</span>
+      <select
+        onchange="
+          document.querySelector('link[href*=themes]').href = '../themes/' + this.value + '.css'
+        "
+      >
+        <option value="default">Default</option>
+      </select>
+    </div>
+
+    <script>
+      const template = document.getElementById('app-template').innerHTML;
+
+      /* Render the shared template into each variant container with per-variant
+       * DOM ID suffixes so we can target the right prompt slot. */
+      ['a', 'b', 'c'].forEach((letter) => {
+        const html = template.replaceAll('CONTENT_ID', letter);
+        document.getElementById('variant-' + letter).innerHTML = html;
+      });
+
+      /* Hide variant B's overlap-highlight on variants A and C.
+       * The highlight is part of variant B's pattern specifically. */
+      ['a', 'c'].forEach((letter) => {
+        const v = document.getElementById('variant-' + letter);
+        v.querySelectorAll('.overlap-highlight').forEach((el) => el.remove());
+      });
+
+      /* Inject the merge prompt into each variant at the right DOM slot. */
+      const PROMPT_HTML_A = `
+        <div class="merge-prompt merge-prompt-base prompt-a">
+          <div class="prompt-text">
+            This cut overlaps an existing one. <strong>Merge them into one cut?</strong>
+          </div>
+          <div class="prompt-buttons">
+            <button class="prompt-btn cancel">Cancel</button>
+            <button class="prompt-btn confirm">Merge</button>
+          </div>
+        </div>`;
+
+      const PROMPT_HTML_B = `
+        <div class="merge-prompt merge-prompt-base prompt-b">
+          <div class="prompt-text">
+            Your new cut overlaps this existing cut (highlighted).
+            <strong>Merge into one continuous cut?</strong>
+          </div>
+          <div class="prompt-buttons">
+            <button class="prompt-btn cancel">Keep separate (cancel)</button>
+            <button class="prompt-btn confirm">Merge</button>
+          </div>
+        </div>`;
+
+      const PROMPT_HTML_C = `
+        <div class="merge-prompt prompt-c">
+          <div class="prompt-text">
+            Your new cut overlaps an existing cut (from 1:10 to 1:20).
+            <strong>Merge them into one continuous cut, or keep them separate?</strong>
+          </div>
+          <div class="prompt-buttons">
+            <button class="prompt-btn cancel">Cancel (discard new cut)</button>
+            <button class="prompt-btn confirm">Merge</button>
+          </div>
+        </div>`;
+
+      /* Variant A & B: prompt goes inside the timeline-content (positioned
+       * relative to the track). Variant C: prompt goes in the toast slot
+       * at the bottom of main. */
+      document
+        .querySelector('#variant-a .timeline-wrap')
+        .insertAdjacentHTML('beforeend', PROMPT_HTML_A);
+      document
+        .querySelector('#variant-b .timeline-wrap')
+        .insertAdjacentHTML('beforeend', PROMPT_HTML_B);
+      document
+        .querySelector('#variant-c .c-toast-slot')
+        .insertAdjacentHTML('beforeend', PROMPT_HTML_C);
+
+      /* Populate waveform overlays in all variants */
+      function fillWaveform(container, barCount) {
+        for (let i = 0; i < barCount; i++) {
+          const t = i / barCount;
+          const envelope = Math.sin(t * Math.PI) * 0.8 + Math.sin(t * Math.PI * 3) * 0.15 + 0.1;
+          const noise = (Math.sin(i * 7.3) + Math.sin(i * 2.1)) * 0.1;
+          const amp = Math.max(0.1, Math.min(0.95, envelope + noise));
+          const bar = document.createElement('div');
+          bar.className = 'wave-bar';
+          bar.style.height = `${amp * 100}%`;
+          container.appendChild(bar);
+        }
+      }
+      document.querySelectorAll('.wave-overlay').forEach((el) => fillWaveform(el, 80));
+
+      /* Variant switcher */
+      function showVariant(id, tab) {
+        document.querySelectorAll('.variant').forEach((v) => {
+          v.classList.remove('active');
+          v.style.display = 'none';
+        });
+        document.querySelectorAll('.variant-tab').forEach((t) => t.classList.remove('active'));
+        document.getElementById('variant-' + id).classList.add('active');
+        document.getElementById('variant-' + id).style.display = 'block';
+        tab.classList.add('active');
+      }
+
+      /* State cycling — the demo buttons switch the variant between:
+       *   "" (default): prompt showing, pending + existing cuts visible
+       *   "merged": one big merged cut, no prompt
+       *   "cancelled": existing cut only, no prompt, no pending */
+      function setState(btn, state) {
+        const variant = btn.closest('.variant');
+        variant.classList.remove('state-merged', 'state-cancelled');
+        if (state) variant.classList.add('state-' + state);
+        variant.querySelectorAll('.demo-controls button').forEach((b) => b.classList.remove('on'));
+        btn.classList.add('on');
+      }
+
+      /* Prompt-button feedback — show the state change when clicked */
+      document.querySelectorAll('.prompt-btn.confirm').forEach((b) => {
+        b.addEventListener('click', (e) => {
+          const variant = e.target.closest('.variant');
+          variant.classList.add('state-merged');
+          variant
+            .querySelectorAll('.demo-controls button')
+            .forEach((x) => x.classList.remove('on'));
+          variant.querySelectorAll('.demo-controls button')[1].classList.add('on');
+        });
+      });
+      document.querySelectorAll('.prompt-btn.cancel').forEach((b) => {
+        b.addEventListener('click', (e) => {
+          const variant = e.target.closest('.variant');
+          variant.classList.add('state-cancelled');
+          variant
+            .querySelectorAll('.demo-controls button')
+            .forEach((x) => x.classList.remove('on'));
+          variant.querySelectorAll('.demo-controls button')[2].classList.add('on');
+        });
+      });
+
+      /* Play button toggle */
+      document.querySelectorAll('.play-btn, .ctl-btn.primary').forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+          const b = e.currentTarget;
+          b.textContent = b.textContent === '▶' ? '⏸' : '▶';
+        });
+      });
+    </script>
+  </body>
+</html>

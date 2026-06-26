@@ -1,0 +1,47 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build artifacts
+dist/
+build/
+.svelte-kit/
+src-tauri/target/
+src-tauri/gen/
+
+# FFmpeg sidecar binaries (fetched at build time, never committed)
+src-tauri/binaries/
+
+# Playwright test artifacts
+test-results/
+playwright-report/
+
+# Browser-automation user-data profile (agent-browser; never committed or formatted)
+.browser-data/
+
+# Tauri test artifacts
+tests/fixtures/golden/*.framehash
+tests/fixtures/lavfi/*.mp4
+tests/fixtures/lavfi/*.mkv
+!tests/fixtures/lavfi/.gitkeep
+
+# Logs
+*.log
+.bun-debug
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Claude Code (per-machine local config)
+.claude/settings.local.json
+
+# Env
+.env
+.env*.local

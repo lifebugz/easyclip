@@ -1,0 +1,2 @@
+The code execution cannot proceed because avcodec-61.dll was not found. Reinstalling the program may fix this problem.
+ffmpeg.exe - System Error

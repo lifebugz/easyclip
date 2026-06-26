@@ -1,0 +1,86 @@
+{
+  "ffmpegVersion": "8.1",
+  "license": "LGPL",
+  "targets": {
+    "aarch64-apple-darwin": {
+      "archive": "zip",
+      "binaries": {
+        "ffmpeg": {
+          "url": "https://ffmpeg.martin-riedl.de/redirect/latest/macos/arm64/release/ffmpeg.zip",
+          "sha256": "a05b1a47bb3ac89a95a55eec713f8bbb347051bb07015f3b7d08fb62ed81a21e",
+          "pathInArchive": "ffmpeg"
+        },
+        "ffprobe": {
+          "url": "https://ffmpeg.martin-riedl.de/redirect/latest/macos/arm64/release/ffprobe.zip",
+          "sha256": "135e70d2518beeb568183952dbc4bdeca1628dd49a7376d57e6b27dbc57d209f",
+          "pathInArchive": "ffprobe"
+        }
+      },
+      "source": "ffmpeg.martin-riedl.de"
+    },
+    "x86_64-apple-darwin": {
+      "archive": "zip",
+      "binaries": {
+        "ffmpeg": {
+          "url": "https://ffmpeg.martin-riedl.de/redirect/latest/macos/amd64/release/ffmpeg.zip",
+          "sha256": "8cb711bfa6f66033112d708dc275220419d0fdb49c5b752f8db25f11a92d321f",
+          "pathInArchive": "ffmpeg"
+        },
+        "ffprobe": {
+          "url": "https://ffmpeg.martin-riedl.de/redirect/latest/macos/amd64/release/ffprobe.zip",
+          "sha256": "e9b9b83fef584c367b27c683a1172921b4f48fa8bd5df6712ef54e63b915ea50",
+          "pathInArchive": "ffprobe"
+        }
+      },
+      "source": "ffmpeg.martin-riedl.de"
+    },
+    "x86_64-unknown-linux-gnu": {
+      "archive": "zip",
+      "binaries": {
+        "ffmpeg": {
+          "url": "https://ffmpeg.martin-riedl.de/redirect/latest/linux/amd64/release/ffmpeg.zip",
+          "sha256": "50b9360d9f0de1555bb4dd354c708427027562624d553e93bb26060059bef16a",
+          "pathInArchive": "ffmpeg"
+        },
+        "ffprobe": {
+          "url": "https://ffmpeg.martin-riedl.de/redirect/latest/linux/amd64/release/ffprobe.zip",
+          "sha256": "35595494d31fb0d15948199bc7242265929a6dcdb74d7a097bd3f373f840dbeb",
+          "pathInArchive": "ffprobe"
+        }
+      },
+      "source": "ffmpeg.martin-riedl.de"
+    },
+    "x86_64-pc-windows-msvc": {
+      "archive": "zip",
+      "binaries": {
+        "ffmpeg": {
+          "url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n8.1-latest-win64-lgpl-8.1.zip",
+          "sha256": "f5f68b32197279fb294af2d043438dd4dfc12468a6c8d0852f4f95a3b9982f12",
+          "pathInArchive": "ffmpeg-n8.1-latest-win64-lgpl-8.1/bin/ffmpeg.exe"
+        },
+        "ffprobe": {
+          "url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n8.1-latest-win64-lgpl-8.1.zip",
+          "sha256": "f5f68b32197279fb294af2d043438dd4dfc12468a6c8d0852f4f95a3b9982f12",
+          "pathInArchive": "ffmpeg-n8.1-latest-win64-lgpl-8.1/bin/ffprobe.exe"
+        }
+      },
+      "source": "github.com/BtbN/FFmpeg-Builds"
+    },
+    "aarch64-pc-windows-msvc": {
+      "archive": "zip",
+      "binaries": {
+        "ffmpeg": {
+          "url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n8.1-latest-winarm64-lgpl-8.1.zip",
+          "sha256": "a672092dcc95fcb003238c780c2fdff5d8c69f38ce761340c01ea65468bfa956",
+          "pathInArchive": "ffmpeg-n8.1-latest-winarm64-lgpl-8.1/bin/ffmpeg.exe"
+        },
+        "ffprobe": {
+          "url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n8.1-latest-winarm64-lgpl-8.1.zip",
+          "sha256": "a672092dcc95fcb003238c780c2fdff5d8c69f38ce761340c01ea65468bfa956",
+          "pathInArchive": "ffmpeg-n8.1-latest-winarm64-lgpl-8.1/bin/ffprobe.exe"
+        }
+      },
+      "source": "github.com/BtbN/FFmpeg-Builds"
+    }
+  }
+}

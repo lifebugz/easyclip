@@ -1,0 +1,4 @@
+dyld[12345]: Library not loaded: '@rpath/libavcodec.61.dylib'
+  Referenced from: '<main executable>'
+  Reason: tried: '/usr/local/lib/libavcodec.61.dylib' (no such file), '/usr/lib/libavcodec.61.dylib' (no such file)
+zsh: abort      ./ffmpeg -version

@@ -1,0 +1,902 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sketch 001: Unified Timeline Editor — Main View</title>
+    <link rel="stylesheet" href="../themes/default.css" />
+    <style>
+      /* ───── Reset + base ─────────────────────────────────────────── */
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        font-family: var(--font-sans);
+        background: var(--color-bg);
+        color: var(--color-text);
+        padding-top: 52px; /* reserve for variant nav */
+      }
+
+      /* ───── Variant nav ──────────────────────────────────────────── */
+      #variant-nav {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 9998;
+        background: var(--color-surface);
+        border-bottom: 1px solid var(--color-border);
+        padding: 8px 16px;
+        display: flex;
+        gap: 6px;
+      }
+      .variant-tab {
+        padding: 6px 14px;
+        font: 500 var(--text-sm) var(--font-sans);
+        background: transparent;
+        border: 1px solid var(--color-border-strong);
+        border-radius: var(--radius-sm);
+        color: var(--color-text-body);
+        cursor: pointer;
+        transition: all 0.15s ease;
+      }
+      .variant-tab:hover {
+        background: var(--color-bg);
+      }
+      .variant-tab.active {
+        background: var(--color-primary);
+        color: white;
+        border-color: var(--color-primary);
+      }
+      .variant {
+        display: none;
+      }
+      .variant.active {
+        display: block;
+      }
+
+      /* ───── App shell (mirrors Phase 4 layout) ───────────────────── */
+      .app {
+        max-width: 1100px;
+        margin: 0 auto;
+        background: var(--color-surface);
+        min-height: calc(100vh - 52px);
+        display: flex;
+        flex-direction: column;
+        border-left: 1px solid var(--color-border);
+        border-right: 1px solid var(--color-border);
+      }
+      .app-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px 24px;
+        border-bottom: 1px solid var(--color-border);
+      }
+      .app-title {
+        font-weight: 700;
+        font-size: var(--text-base);
+      }
+      .lang-toggle {
+        padding: 4px 12px;
+        font-size: var(--text-sm);
+        background: transparent;
+        border: 1px solid var(--color-border-strong);
+        border-radius: var(--radius-sm);
+        cursor: pointer;
+      }
+
+      /* ───── Stepper (Phase 4 style, 4 dots for unified editor) ──── */
+      .stepper {
+        display: flex;
+        align-items: center;
+        gap: var(--space-6);
+        padding: 16px 24px;
+        border-bottom: 1px solid var(--color-border);
+        list-style: none;
+      }
+      .stepper li {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .step-dot {
+        width: 28px;
+        height: 28px;
+        border-radius: var(--radius-full);
+        display: grid;
+        place-items: center;
+        font-weight: 700;
+        font-size: var(--text-sm);
+      }
+      .step-dot.done {
+        background: var(--color-success-600);
+        color: white;
+      }
+      .step-dot.active {
+        background: var(--color-primary);
+        color: white;
+      }
+      .step-dot.future {
+        background: transparent;
+        color: var(--color-text-muted);
+        border: 1.5px solid var(--color-border-strong);
+      }
+      .step-label {
+        font-size: var(--text-sm);
+      }
+      .step-label.active {
+        color: var(--color-text);
+        font-weight: 600;
+      }
+      .step-label.muted {
+        color: var(--color-text-muted);
+      }
+
+      /* ───── Main content ────────────────────────────────────────── */
+      main {
+        flex: 1;
+        padding: 24px;
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+      }
+      h1 {
+        font-size: var(--text-2xl);
+        font-weight: 700;
+      }
+      .hint {
+        color: var(--color-text-muted);
+        font-size: var(--text-sm);
+      }
+
+      /* ───── Video preview ────────────────────────────────────────── */
+      .preview {
+        background: #1a1a1a;
+        aspect-ratio: 16 / 9;
+        border-radius: var(--radius-md);
+        display: grid;
+        place-items: center;
+        position: relative;
+        overflow: hidden;
+      }
+      .preview::before {
+        /* Subtle noise/gradient to suggest a video frame */
+        content: '';
+        position: absolute;
+        inset: 0;
+        background:
+          radial-gradient(circle at 30% 40%, rgba(99, 102, 241, 0.18), transparent 55%),
+          radial-gradient(circle at 70% 60%, rgba(14, 165, 233, 0.15), transparent 50%),
+          linear-gradient(180deg, #2a2a2a 0%, #111 100%);
+      }
+      .play-btn {
+        position: relative;
+        z-index: 1;
+        width: 64px;
+        height: 64px;
+        border-radius: var(--radius-full);
+        background: rgba(255, 255, 255, 0.92);
+        color: #111;
+        border: none;
+        font-size: 24px;
+        display: grid;
+        place-items: center;
+        cursor: pointer;
+        transition: all 0.15s ease;
+      }
+      .play-btn:hover {
+        transform: scale(1.05);
+        background: white;
+      }
+
+      /* ───── Timeline common ─────────────────────────────────────── */
+      .time-ruler {
+        display: flex;
+        justify-content: space-between;
+        padding: 0 2px;
+        font-size: var(--text-xs);
+        color: var(--color-text-muted);
+        font-variant-numeric: tabular-nums;
+      }
+      .timeline-wrap {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .timeline-track {
+        position: relative;
+        display: flex;
+        align-items: stretch;
+        background: var(--color-bg);
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-sm);
+        height: 72px;
+        overflow: hidden;
+      }
+
+      /* Side anchors — brand-blue, visually distinct from cuts */
+      .side-anchor {
+        width: 12px;
+        background: var(--color-anchor-fill);
+        position: relative;
+        cursor: ew-resize;
+        z-index: 2;
+        display: grid;
+        place-items: center;
+        flex-shrink: 0;
+      }
+      .side-anchor::before,
+      .side-anchor::after {
+        content: '';
+        position: absolute;
+        width: 2px;
+        height: 18px;
+        background: var(--color-anchor-grip);
+        border-radius: 1px;
+      }
+      .side-anchor::before {
+        left: 3px;
+      }
+      .side-anchor::after {
+        right: 3px;
+      }
+      .side-anchor:hover {
+        background: var(--color-brand-700);
+      }
+
+      /* The content between anchors — variant-specific */
+      .timeline-content {
+        flex: 1;
+        position: relative;
+        overflow: hidden;
+      }
+
+      /* Playhead (present in all variants, subtle) */
+      .playhead {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: 2px;
+        background: white;
+        box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4);
+        z-index: 3;
+        pointer-events: none;
+      }
+      .playhead::before {
+        content: '';
+        position: absolute;
+        top: -4px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 10px;
+        height: 10px;
+        background: white;
+        border: 1px solid rgba(0, 0, 0, 0.4);
+        border-radius: 50%;
+      }
+
+      /* ───── Variant A: Minimal bar ──────────────────────────────── */
+      .track-bar {
+        height: 100%;
+        background: linear-gradient(180deg, var(--color-brand-100), var(--color-brand-50));
+        border-left: 1px solid var(--color-brand-100);
+        border-right: 1px solid var(--color-brand-100);
+      }
+
+      /* ───── Variant B: Filmstrip ────────────────────────────────── */
+      .track-filmstrip {
+        height: 100%;
+        display: flex;
+        gap: 1px;
+        background: #222;
+      }
+      .frame {
+        flex: 1;
+        position: relative;
+        background: linear-gradient(135deg, var(--c1, #3a4a6b) 0%, var(--c2, #5b7aa3) 100%);
+      }
+      .frame::after {
+        /* frame-line imitation (top/bottom perforations) */
+        content: '';
+        position: absolute;
+        inset: 4px 2px;
+        background: linear-gradient(135deg, rgba(255, 255, 255, 0.08), transparent);
+        border-radius: 2px;
+      }
+
+      /* ───── Variant C: Waveform ─────────────────────────────────── */
+      .track-waveform {
+        height: 100%;
+        display: flex;
+        align-items: center;
+        gap: 2px;
+        padding: 4px;
+        background: var(--color-brand-50);
+      }
+      .wave-bar {
+        flex: 1;
+        background: linear-gradient(180deg, var(--color-brand-600), var(--color-brand-700));
+        border-radius: 2px;
+        min-width: 2px;
+      }
+
+      /* ───── Variant D: Dynamic — A base + C overlay ──────────────
+       * Synthesis: calm brand band (from A) serves as frame; real-audio
+       * waveform (from C) renders inside as a translucent overlay. When
+       * a file has no audio the overlay hides automatically and you get
+       * the pure A look — "context-aware" dynamism.
+       */
+      .track-dynamic {
+        height: 100%;
+        position: relative;
+        background: linear-gradient(180deg, var(--color-brand-100), var(--color-brand-50));
+      }
+      .track-dynamic .wave-overlay {
+        position: absolute;
+        inset: 6px 4px;
+        display: flex;
+        align-items: center;
+        gap: 2px;
+        transition: opacity 0.3s ease;
+      }
+      .track-dynamic.silent .wave-overlay {
+        opacity: 0;
+      }
+      .track-dynamic .wave-overlay .wave-bar {
+        flex: 1;
+        background: linear-gradient(180deg, rgba(37, 99, 235, 0.55), rgba(29, 78, 216, 0.42));
+        border-radius: 1px;
+        min-width: 2px;
+      }
+      .audio-toggle {
+        display: flex;
+        gap: 6px;
+        font-size: var(--text-xs);
+        color: var(--color-text-muted);
+        align-items: center;
+        margin-bottom: -2px;
+      }
+      .audio-toggle button {
+        padding: 2px 8px;
+        font-size: var(--text-xs);
+        background: var(--color-bg);
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-sm);
+        cursor: pointer;
+        color: var(--color-text-body);
+        transition: all 0.15s ease;
+      }
+      .audio-toggle button:hover {
+        background: var(--color-surface);
+      }
+      .audio-toggle button.on {
+        background: var(--color-brand-50);
+        border-color: var(--color-brand-600);
+        color: var(--color-brand-700);
+        font-weight: 600;
+      }
+      .audio-toggle-label {
+        margin-inline-end: 4px;
+      }
+
+      /* ───── Playback row ────────────────────────────────────────── */
+      .playback-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 4px 2px;
+      }
+      .playback-controls {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .ctl-btn {
+        width: 34px;
+        height: 34px;
+        border-radius: var(--radius-full);
+        border: 1px solid var(--color-border-strong);
+        background: var(--color-surface);
+        display: grid;
+        place-items: center;
+        cursor: pointer;
+        font-size: 13px;
+        color: var(--color-text-body);
+        transition: all 0.15s ease;
+      }
+      .ctl-btn:hover {
+        background: var(--color-bg);
+        border-color: var(--color-text-muted);
+      }
+      .ctl-btn.primary {
+        background: var(--color-primary);
+        color: white;
+        border-color: var(--color-primary);
+        width: 42px;
+        height: 42px;
+        font-size: 16px;
+      }
+      .ctl-btn.primary:hover {
+        background: var(--color-primary-hover);
+      }
+      .time-display {
+        font: 500 var(--text-sm) var(--font-mono);
+        color: var(--color-text-body);
+        font-variant-numeric: tabular-nums;
+      }
+      .hint-inline {
+        font-size: var(--text-xs);
+        color: var(--color-text-muted);
+      }
+
+      /* ───── Footer (wizard chrome) ──────────────────────────────── */
+      .app-footer {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 16px 24px;
+        border-top: 1px solid var(--color-border);
+        background: var(--color-surface);
+      }
+      .btn {
+        padding: 8px 16px;
+        border-radius: var(--radius-sm);
+        font: 500 var(--text-sm) var(--font-sans);
+        cursor: pointer;
+        border: 1px solid var(--color-border-strong);
+        background: var(--color-surface);
+        color: var(--color-text);
+        transition: all 0.15s ease;
+      }
+      .btn:hover {
+        background: var(--color-bg);
+      }
+      .btn-primary {
+        margin-left: auto;
+        background: var(--color-primary);
+        color: white;
+        border-color: var(--color-primary);
+        font-weight: 700;
+      }
+      .btn-primary:hover {
+        background: var(--color-primary-hover);
+      }
+
+      /* ───── Sketch toolbar (bottom-right) ───────────────────────── */
+      #sketch-tools {
+        position: fixed;
+        bottom: 12px;
+        right: 12px;
+        z-index: 9999;
+        font: 500 12px var(--font-sans);
+        background: rgba(0, 0, 0, 0.78);
+        color: white;
+        padding: 8px 10px;
+        border-radius: 8px;
+        opacity: 0.35;
+        transition: opacity 0.2s;
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+      #sketch-tools:hover {
+        opacity: 1;
+      }
+      #sketch-tools select,
+      #sketch-tools button {
+        font: 500 11px var(--font-sans);
+        background: rgba(255, 255, 255, 0.1);
+        color: white;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 4px;
+        padding: 3px 6px;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- ───── Variant nav ────────────────────────────────────────── -->
+    <nav id="variant-nav" role="tablist">
+      <button class="variant-tab active" onclick="showVariant('a', this)">A: Minimal bar</button>
+      <button class="variant-tab" onclick="showVariant('b', this)">B: Filmstrip</button>
+      <button class="variant-tab" onclick="showVariant('c', this)">C: Waveform</button>
+      <button class="variant-tab" onclick="showVariant('d', this)">
+        D: Dynamic (A + C overlay) ★ Selected
+      </button>
+    </nav>
+
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <!-- VARIANT A — MINIMAL BAR                                    -->
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <div class="variant active" id="variant-a">
+      <div class="app">
+        <header class="app-header">
+          <div class="app-title">EasyClip</div>
+          <button class="lang-toggle">עברית</button>
+        </header>
+        <ol class="stepper">
+          <li>
+            <span class="step-dot done" aria-label="Completed">✓</span>
+            <span class="step-label muted">Pick a file</span>
+          </li>
+          <li>
+            <span class="step-dot active">2</span>
+            <span class="step-label active">Edit your clip</span>
+          </li>
+          <li>
+            <span class="step-dot future">3</span>
+            <span class="step-label muted">Trimming</span>
+          </li>
+          <li>
+            <span class="step-dot future">4</span>
+            <span class="step-label muted">Done</span>
+          </li>
+        </ol>
+        <main>
+          <div>
+            <h1>Edit your clip</h1>
+            <p class="hint">
+              Drag the blue handles on the edges to trim the start or end. Hover the timeline to cut
+              out a middle section.
+            </p>
+          </div>
+
+          <div class="preview">
+            <button class="play-btn" aria-label="Play">▶</button>
+          </div>
+
+          <div class="timeline-wrap">
+            <div class="time-ruler">
+              <span>0:00</span><span>0:30</span><span>1:00</span><span>1:30</span><span>2:00</span>
+            </div>
+            <div class="timeline-track">
+              <div class="side-anchor" aria-label="Trim start"></div>
+              <div class="timeline-content">
+                <div class="track-bar"></div>
+                <div class="playhead" style="left: 32%"></div>
+              </div>
+              <div class="side-anchor" aria-label="Trim end"></div>
+            </div>
+            <div class="playback-row">
+              <div class="playback-controls">
+                <button class="ctl-btn" aria-label="Back 5 seconds">⏮</button>
+                <button class="ctl-btn primary" aria-label="Play">▶</button>
+                <button class="ctl-btn" aria-label="Forward 5 seconds">⏭</button>
+              </div>
+              <div class="time-display">0:37 / 2:00</div>
+            </div>
+          </div>
+        </main>
+        <footer class="app-footer">
+          <button class="btn">Back</button>
+          <button class="btn">Start over</button>
+          <button class="btn btn-primary">Continue</button>
+        </footer>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <!-- VARIANT B — FILMSTRIP                                       -->
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <div class="variant" id="variant-b">
+      <div class="app">
+        <header class="app-header">
+          <div class="app-title">EasyClip</div>
+          <button class="lang-toggle">עברית</button>
+        </header>
+        <ol class="stepper">
+          <li>
+            <span class="step-dot done">✓</span>
+            <span class="step-label muted">Pick a file</span>
+          </li>
+          <li>
+            <span class="step-dot active">2</span>
+            <span class="step-label active">Edit your clip</span>
+          </li>
+          <li>
+            <span class="step-dot future">3</span>
+            <span class="step-label muted">Trimming</span>
+          </li>
+          <li>
+            <span class="step-dot future">4</span>
+            <span class="step-label muted">Done</span>
+          </li>
+        </ol>
+        <main>
+          <div>
+            <h1>Edit your clip</h1>
+            <p class="hint">
+              Drag the blue handles to trim the start or end. Hover the frames to cut out a middle
+              section.
+            </p>
+          </div>
+
+          <div class="preview">
+            <button class="play-btn" aria-label="Play">▶</button>
+          </div>
+
+          <div class="timeline-wrap">
+            <div class="time-ruler">
+              <span>0:00</span><span>0:30</span><span>1:00</span><span>1:30</span><span>2:00</span>
+            </div>
+            <div class="timeline-track">
+              <div class="side-anchor"></div>
+              <div class="timeline-content">
+                <div class="track-filmstrip" id="filmstrip-b" aria-hidden="true"></div>
+                <div class="playhead" style="left: 32%"></div>
+              </div>
+              <div class="side-anchor"></div>
+            </div>
+            <div class="playback-row">
+              <div class="playback-controls">
+                <button class="ctl-btn">⏮</button>
+                <button class="ctl-btn primary">▶</button>
+                <button class="ctl-btn">⏭</button>
+              </div>
+              <div class="time-display">0:37 / 2:00</div>
+            </div>
+          </div>
+        </main>
+        <footer class="app-footer">
+          <button class="btn">Back</button>
+          <button class="btn">Start over</button>
+          <button class="btn btn-primary">Continue</button>
+        </footer>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <!-- VARIANT C — WAVEFORM                                        -->
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <div class="variant" id="variant-c">
+      <div class="app">
+        <header class="app-header">
+          <div class="app-title">EasyClip</div>
+          <button class="lang-toggle">עברית</button>
+        </header>
+        <ol class="stepper">
+          <li>
+            <span class="step-dot done">✓</span>
+            <span class="step-label muted">Pick a file</span>
+          </li>
+          <li>
+            <span class="step-dot active">2</span>
+            <span class="step-label active">Edit your clip</span>
+          </li>
+          <li>
+            <span class="step-dot future">3</span>
+            <span class="step-label muted">Trimming</span>
+          </li>
+          <li>
+            <span class="step-dot future">4</span>
+            <span class="step-label muted">Done</span>
+          </li>
+        </ol>
+        <main>
+          <div>
+            <h1>Edit your clip</h1>
+            <p class="hint">
+              Drag the blue handles to trim the start or end. Hover the waveform to cut out a middle
+              section.
+            </p>
+          </div>
+
+          <div class="preview">
+            <button class="play-btn" aria-label="Play">▶</button>
+          </div>
+
+          <div class="timeline-wrap">
+            <div class="time-ruler">
+              <span>0:00</span><span>0:30</span><span>1:00</span><span>1:30</span><span>2:00</span>
+            </div>
+            <div class="timeline-track">
+              <div class="side-anchor"></div>
+              <div class="timeline-content">
+                <div class="track-waveform" id="waveform-c" aria-hidden="true"></div>
+                <div class="playhead" style="left: 32%"></div>
+              </div>
+              <div class="side-anchor"></div>
+            </div>
+            <div class="playback-row">
+              <div class="playback-controls">
+                <button class="ctl-btn">⏮</button>
+                <button class="ctl-btn primary">▶</button>
+                <button class="ctl-btn">⏭</button>
+              </div>
+              <div class="time-display">0:37 / 2:00</div>
+            </div>
+          </div>
+        </main>
+        <footer class="app-footer">
+          <button class="btn">Back</button>
+          <button class="btn">Start over</button>
+          <button class="btn btn-primary">Continue</button>
+        </footer>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <!-- VARIANT D — DYNAMIC (A base + C overlay)                    -->
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <div class="variant" id="variant-d">
+      <div class="app">
+        <header class="app-header">
+          <div class="app-title">EasyClip</div>
+          <button class="lang-toggle">עברית</button>
+        </header>
+        <ol class="stepper">
+          <li>
+            <span class="step-dot done">✓</span>
+            <span class="step-label muted">Pick a file</span>
+          </li>
+          <li>
+            <span class="step-dot active">2</span>
+            <span class="step-label active">Edit your clip</span>
+          </li>
+          <li>
+            <span class="step-dot future">3</span>
+            <span class="step-label muted">Trimming</span>
+          </li>
+          <li>
+            <span class="step-dot future">4</span>
+            <span class="step-label muted">Done</span>
+          </li>
+        </ol>
+        <main>
+          <div>
+            <h1>Edit your clip</h1>
+            <p class="hint">
+              Drag the blue handles to trim the start or end. Hover the timeline to cut out a middle
+              section. If your file has audio, the waveform shows you where sound happens — useful
+              for finding dialogue pauses.
+            </p>
+          </div>
+
+          <div class="preview">
+            <button class="play-btn" aria-label="Play">▶</button>
+          </div>
+
+          <div class="timeline-wrap">
+            <div class="audio-toggle" aria-label="Demo: toggle audio presence">
+              <span class="audio-toggle-label">Demo the adaptive fallback →</span>
+              <button id="audio-on-btn" class="on" onclick="setAudio(true)">File has audio</button>
+              <button id="audio-off-btn" onclick="setAudio(false)">Silent / audio-less file</button>
+            </div>
+            <div class="time-ruler">
+              <span>0:00</span><span>0:30</span><span>1:00</span><span>1:30</span><span>2:00</span>
+            </div>
+            <div class="timeline-track">
+              <div class="side-anchor"></div>
+              <div class="timeline-content">
+                <div class="track-dynamic" id="dynamic-d">
+                  <div class="wave-overlay" id="wave-overlay-d"></div>
+                </div>
+                <div class="playhead" style="left: 32%"></div>
+              </div>
+              <div class="side-anchor"></div>
+            </div>
+            <div class="playback-row">
+              <div class="playback-controls">
+                <button class="ctl-btn">⏮</button>
+                <button class="ctl-btn primary">▶</button>
+                <button class="ctl-btn">⏭</button>
+              </div>
+              <div class="time-display">0:37 / 2:00</div>
+            </div>
+          </div>
+        </main>
+        <footer class="app-footer">
+          <button class="btn">Back</button>
+          <button class="btn">Start over</button>
+          <button class="btn btn-primary">Continue</button>
+        </footer>
+      </div>
+    </div>
+
+    <!-- ───── Sketch toolbar ───────────────────────────────────────── -->
+    <div id="sketch-tools">
+      <span>Sketch 001</span>
+      <select
+        onchange="
+          document.querySelector('link[href*=themes]').href = '../themes/' + this.value + '.css'
+        "
+      >
+        <option value="default">Default</option>
+      </select>
+    </div>
+
+    <script>
+      /* ───── Variant switcher ───────────────────────────────────── */
+      function showVariant(id, tab) {
+        document.querySelectorAll('.variant').forEach((v) => {
+          v.classList.remove('active');
+          v.style.display = 'none';
+        });
+        document.querySelectorAll('.variant-tab').forEach((t) => {
+          t.classList.remove('active');
+        });
+        document.getElementById('variant-' + id).classList.add('active');
+        document.getElementById('variant-' + id).style.display = 'block';
+        tab.classList.add('active');
+      }
+
+      /* ───── Filmstrip: generate 24 pseudo-thumbnails ─────────────
+       * Using HSL hue shifts + brightness variation to suggest a video's
+       * natural frame-by-frame color drift. Not realistic thumbnails — just
+       * enough visual density to judge whether this feels right.
+       */
+      const filmstripContainer = document.getElementById('filmstrip-b');
+      if (filmstripContainer) {
+        for (let i = 0; i < 24; i++) {
+          const hue = 200 + Math.sin(i * 0.7) * 40;
+          const l1 = 35 + Math.sin(i * 1.3) * 10;
+          const l2 = l1 + 15;
+          const frame = document.createElement('div');
+          frame.className = 'frame';
+          frame.style.setProperty('--c1', `hsl(${hue}, 25%, ${l1}%)`);
+          frame.style.setProperty('--c2', `hsl(${hue}, 30%, ${l2}%)`);
+          filmstripContainer.appendChild(frame);
+        }
+      }
+
+      /* ───── Waveform envelope generator (shared by C and D) ───────
+       * In the real app this envelope is computed from actual audio
+       * samples (FFmpeg decode → amplitude downsampling → N values). The
+       * sine+noise approximation here shows what the resulting shape
+       * would look like for a typical home video (quiet intro, loud
+       * middle, quiet end). "Dynamically" in variant D means: generated
+       * from the file's real audio data on load — not from this sketch's
+       * sine fallback.
+       */
+      function fillWaveform(container, barCount) {
+        for (let i = 0; i < barCount; i++) {
+          const t = i / barCount;
+          const envelope = Math.sin(t * Math.PI) * 0.8 + Math.sin(t * Math.PI * 3) * 0.15 + 0.1;
+          const noise = (Math.sin(i * 7.3) + Math.sin(i * 2.1)) * 0.1;
+          const amp = Math.max(0.1, Math.min(0.95, envelope + noise));
+          const bar = document.createElement('div');
+          bar.className = 'wave-bar';
+          bar.style.height = `${amp * 100}%`;
+          container.appendChild(bar);
+        }
+      }
+
+      const waveContainer = document.getElementById('waveform-c');
+      if (waveContainer) fillWaveform(waveContainer, 80);
+
+      /* ───── Variant D: same waveform generator, into the overlay ──
+       * The overlay sits inside the brand-tinted bar, so the waveform
+       * reads as supplemental info rather than the timeline's identity.
+       */
+      const waveOverlayD = document.getElementById('wave-overlay-d');
+      if (waveOverlayD) fillWaveform(waveOverlayD, 80);
+
+      /* ───── Variant D: adaptive-fallback toggle ─────────────────── */
+      function setAudio(hasAudio) {
+        const track = document.getElementById('dynamic-d');
+        const onBtn = document.getElementById('audio-on-btn');
+        const offBtn = document.getElementById('audio-off-btn');
+        if (hasAudio) {
+          track.classList.remove('silent');
+          onBtn.classList.add('on');
+          offBtn.classList.remove('on');
+        } else {
+          track.classList.add('silent');
+          onBtn.classList.remove('on');
+          offBtn.classList.add('on');
+        }
+      }
+
+      /* ───── Play button toggle ─────────────────────────────────── */
+      document.querySelectorAll('.play-btn, .ctl-btn.primary').forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+          const b = e.currentTarget;
+          b.textContent = b.textContent === '▶' ? '⏸' : '▶';
+        });
+      });
+    </script>
+  </body>
+</html>

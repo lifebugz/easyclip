@@ -1,0 +1,14 @@
+build/
+.svelte-kit/
+dist/
+src-tauri/target/
+src-tauri/binaries/
+src-tauri/gen/
+docs/
+node_modules/
+bun.lockb
+bun.lock
+*.svelte-kit-cache
+test-results/
+playwright-report/
+.browser-data/

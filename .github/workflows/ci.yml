@@ -1,0 +1,159 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: '-D warnings'
+
+jobs:
+  check:
+    name: ${{ matrix.os }} • bun run check
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            triple: x86_64-unknown-linux-gnu
+            bin_ext: ''
+          - os: windows-latest
+            triple: x86_64-pc-windows-msvc
+            bin_ext: '.exe'
+          - os: macos-14
+            triple: aarch64-apple-darwin
+            bin_ext: ''
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux deps (Ubuntu only)
+        if: matrix.os == 'ubuntu-24.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libssl-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            unzip
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ./src-tauri -> target
+
+      - name: Install JS deps
+        run: bun install --frozen-lockfile
+
+      # Generate .svelte-kit/tsconfig.json (gitignored). The root tsconfig extends
+      # it, so without this the type-aware lint/tsc/svelte-check steps in `bun run
+      # check` resolve no types and fail with hundreds of "unsafe"/"cannot resolve"
+      # errors. `prepare` runs sync on install too; this step is the explicit guard.
+      - name: Sync SvelteKit
+        run: bunx svelte-kit sync
+
+      - name: Fetch FFmpeg sidecar
+        run: bun run setup:ffmpeg
+
+      # L1 binary resolution (resolve_path_binary) consumes these. Defaults
+      # point at the fetched sidecars; Windows overrides them below.
+      - name: Point L1 tests at the sidecars
+        shell: bash
+        run: |
+          echo "EASYCLIP_TEST_FFMPEG=${{ github.workspace }}/src-tauri/binaries/ffmpeg-${{ matrix.triple }}${{ matrix.bin_ext }}" >> "$GITHUB_ENV"
+          echo "EASYCLIP_TEST_FFPROBE=${{ github.workspace }}/src-tauri/binaries/ffprobe-${{ matrix.triple }}${{ matrix.bin_ext }}" >> "$GITHUB_ENV"
+
+      # The shipped Windows sidecar is BtbN's LGPL build — no GPL encoders
+      # (libx264), which the app never needs (-c copy only) but the L1 suite
+      # DOES need to GENERATE its h264 fixtures. cargo test therefore runs
+      # against the GPL twin of the same source revision, fetched from a DATED
+      # release tag (immutable, unlike `latest`) and hash-verified. Test
+      # tooling only — the shipped sidecar stays LGPL.
+      - name: Fetch GPL ffmpeg for L1 fixture generation (Windows only)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          $url = 'https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-06-11-14-22/ffmpeg-n8.1.1-12-ge0e38acd2f-win64-gpl-8.1.zip'
+          $zip = Join-Path $env:RUNNER_TEMP 'ffmpeg-gpl-test.zip'
+          Invoke-WebRequest -Uri $url -OutFile $zip
+          $expected = 'ae70466d2c02d7903b29ae7e482bef34b2d805b6543b0c389b84ee2035527e06'
+          $actual = (Get-FileHash -Algorithm SHA256 -Path $zip).Hash.ToLower()
+          if ($actual -ne $expected) { throw "SHA256 mismatch for GPL test ffmpeg: expected $expected, got $actual" }
+          $dest = Join-Path $env:RUNNER_TEMP 'ffmpeg-gpl-test'
+          Expand-Archive -Path $zip -DestinationPath $dest -Force
+          $bin = Join-Path $dest 'ffmpeg-n8.1.1-12-ge0e38acd2f-win64-gpl-8.1\bin'
+          "EASYCLIP_TEST_FFMPEG=$bin\ffmpeg.exe" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "EASYCLIP_TEST_FFPROBE=$bin\ffprobe.exe" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: bun run check
+        run: bun run check
+
+      - name: Install Playwright browsers
+        run: bunx playwright install chromium --with-deps
+
+      - name: bun run test (Playwright e2e)
+        run: bun run test
+
+      # EASYCLIP_TEST_FFMPEG/FFPROBE come from GITHUB_ENV (sidecars on
+      # macOS/Linux; the GPL test build on Windows). A step-level env: block
+      # here would override that, so don't add one.
+      - name: Layer 1 (cargo test)
+        working-directory: src-tauri
+        run: cargo test
+
+      # Layer 2: Linux + Windows use upstream tauri-driver; macOS uses danielraffel/tauri-webdriver-automation
+      - name: Install tauri-driver (Linux + Windows only)
+        if: matrix.os != 'macos-14'
+        run: cargo install tauri-driver --locked
+        continue-on-error: true
+
+      - name: Install tauri-webdriver-automation (macOS only)
+        if: matrix.os == 'macos-14'
+        run: cargo install tauri-webdriver-automation --locked
+        continue-on-error: true
+
+      - name: Layer 2 (WdIO via tauri-driver) - Linux + Windows
+        if: matrix.os != 'macos-14'
+        run: bun run test:layer2
+        continue-on-error: true # Phase 1 has no L2 specs except the macOS spike
+
+      - name: Layer 2 (WdIO via tauri-webdriver-automation) - macOS
+        if: matrix.os == 'macos-14'
+        shell: bash
+        run: |
+          # Build the debug binary the plugin only initializes in
+          (cd src-tauri && cargo build) &
+          CARGO_BUILD_PID=$!
+          # Start Vite dev server (debug build loads from devUrl)
+          bunx --bun vite dev --port 5173 > /tmp/ci-vite.log 2>&1 &
+          VITE_PID=$!
+          wait $CARGO_BUILD_PID
+          sleep 3
+          # Start the tauri-wd CLI
+          tauri-wd --port 4444 > /tmp/ci-tauri-wd.log 2>&1 &
+          TWD_PID=$!
+          sleep 3
+          # Run wdio
+          bunx wdio run wdio.conf.ts
+          WDIO_EXIT=$?
+          # Cleanup
+          kill $TWD_PID $VITE_PID 2>/dev/null || true
+          exit $WDIO_EXIT
+        continue-on-error: true # Phase 1: just the spike test

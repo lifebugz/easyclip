@@ -1,0 +1,3 @@
+[out#0/mp4 @ 0xc5cc11180] Error opening output noperm/out.mp4: Permission denied
+Error opening output file noperm/out.mp4.
+Error opening output files: Permission denied

@@ -1,0 +1,6 @@
+[matroska,webm @ 0x130808140] Could not find codec parameters for stream 0 (Video: hevc, none): unspecified pixel format
+Consider increasing the value for the 'analyzeduration' and 'probesize' options
+Stream mapping:
+Unknown decoder 'av1'
+Error opening output file output.mp4.
+Error opening output files: Decoder not found

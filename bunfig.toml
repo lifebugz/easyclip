@@ -1,0 +1,14 @@
+# bunfig.toml — Bun runtime config
+
+# Restrict `bun test` to unit tests only.
+# Playwright (tests/e2e/) has its own runner; WdIO (tests/wd-*.spec.ts) has its own runner.
+# Without this scope, `bun test` would discover and try to run those.
+[test]
+root = "."
+# Bun's default glob would catch *.test.ts AND *.spec.ts — we only want *.test.ts.
+# tests/e2e/ and tests/wd-*.spec.ts are explicitly NOT picked up here.
+# WdIO spike spec (tests/wd-*.spec.ts) is excluded via --path-ignore-patterns in the check script.
+#
+# Svelte 5 rune stubs ($state, $derived, $effect) so that .svelte.ts modules
+# can be imported in Bun tests without the Svelte compiler running.
+preload = ["./src/test-preload.ts"]

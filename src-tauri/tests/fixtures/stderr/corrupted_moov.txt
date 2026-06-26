@@ -1,0 +1,2 @@
+[mov,mp4,m4a,3gp,3g2,mj2 @ 0x14180f400] moov atom not found
+/tmp/broken.mp4: Invalid data found when processing input

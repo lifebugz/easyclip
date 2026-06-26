@@ -1,0 +1,16 @@
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.ico binary
+*.icns binary
+*.dmg binary
+*.exe binary
+*.dll binary
+*.dylib binary
+*.so binary
+*.zip binary
+*.tar.xz binary
+*.wasm binary
+*.mp4 binary
+*.mkv binary
+*.webm binary

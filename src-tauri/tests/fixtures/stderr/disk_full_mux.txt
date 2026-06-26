@@ -1,0 +1,7 @@
+[aost#0:1/copy @ 0x848c74300] Error submitting a packet to the muxer: No space left on device
+[out#0/mp4 @ 0x848c34180] Error muxing a packet
+[out#0/mp4 @ 0x848c34180] Task finished with error code: -28 (No space left on device)
+[out#0/mp4 @ 0x848c34180] Terminating thread with return code -28 (No space left on device)
+[out#0/mp4 @ 0x848c34180] Error writing trailer: No space left on device
+[out#0/mp4 @ 0x848c34180] Error closing file: No space left on device
+Conversion failed!

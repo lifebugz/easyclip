@@ -1,0 +1,54 @@
+@import 'tailwindcss';
+
+/* Phase 1 baseline @theme tokens (these back the brand color utilities). */
+@theme {
+  --color-brand-50: oklch(97% 0.02 250);
+  --color-brand-500: oklch(58% 0.18 250);
+  --color-brand-700: oklch(42% 0.2 250);
+  --color-brand-900: oklch(28% 0.18 250);
+}
+
+/* Phase 7 timeline-editor semantic tokens, ported from the design bundle
+   (docs/superpowers/design/easyclip-claude-design/project/styles/theme.css).
+   Defined in :root, NOT @theme, on purpose: Tailwind v4 tree-shakes @theme
+   tokens that no utility class references, and these are consumed only via var()
+   inside component <style> blocks — so under @theme they'd be dropped and resolve
+   to transparent/currentColor (invisible cut labels, merge-confirm button,
+   AnchorTip, hover cue, etc.). A plain unlayered :root block is always emitted. */
+:root {
+  --color-brand-100: #dbe7ff;
+  --color-brand-600: #2849d6;
+  --color-brand-800: #1c308a;
+
+  --color-bg: #f7f8fb;
+  --color-border: #e6e8ee;
+  --color-border-strong: #cdd2dc;
+
+  --color-text: #0f1525;
+  --color-text-body: #374055;
+  --color-text-muted: #6b7589;
+
+  --color-danger-500: #dc2626;
+  --color-danger-600: #b91c1c;
+  --color-danger-700: #991b1b;
+
+  --color-anchor-grip: rgba(255, 255, 255, 0.92);
+
+  /* Phase 8: preview-tc corner radius. Tailwind v4 emits its built-in default
+     --radius-xs (.125rem) regardless of utility usage, so this :root block is an
+     OVERRIDE, not a tree-shaking workaround (unlike the custom color tokens
+     above): it appears later in source order at equal specificity, so 3px wins.
+     Value from the design bundle theme.css (--radius-xs). */
+  --radius-xs: 3px;
+
+  --shadow-sm: 0 1px 2px rgba(15, 21, 37, 0.06);
+  --shadow-lg: 0 12px 28px rgba(15, 21, 37, 0.12), 0 4px 10px rgba(15, 21, 37, 0.06);
+}
+
+html {
+  font-family:
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    sans-serif;
+}
