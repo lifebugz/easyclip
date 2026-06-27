@@ -15,8 +15,8 @@ binary):
 
   Corresponding source: https://ffmpeg.org/download.html
   The exact builds and SHA-256 checksums used by EasyClip are pinned in
-  scripts/ffmpeg-checksums.json. Upstream build mirrors:
-    - macOS:   https://ffmpeg.martin-riedl.de/  (and https://evermeet.cx/ffmpeg/)
+  scripts/ffmpeg-checksums.json. Upstream build sources:
+    - macOS:   https://ffmpeg.martin-riedl.de/
     - Windows: https://github.com/BtbN/FFmpeg-Builds
 
   LGPL relink/replace right: because FFmpeg is shipped as a SEPARATE

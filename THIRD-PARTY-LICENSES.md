@@ -12,9 +12,9 @@ Distributed builds additionally include the following third-party components.
 - **Linkage:** shipped as a separate sidecar executable, invoked as a child
   process; not statically or dynamically linked into the EasyClip binary
 - **Corresponding source:** https://ffmpeg.org/download.html — exact builds &
-  SHA-256 pins in `scripts/ffmpeg-checksums.json`; mirrors:
-  https://ffmpeg.martin-riedl.de/ , https://evermeet.cx/ffmpeg/ ,
-  https://github.com/BtbN/FFmpeg-Builds
+  SHA-256 pins in `scripts/ffmpeg-checksums.json`; build sources:
+  https://ffmpeg.martin-riedl.de/ (macOS, Linux) and
+  https://github.com/BtbN/FFmpeg-Builds (Windows)
 - **Your LGPL replace right:** swap `src-tauri/binaries/ffmpeg-<target-triple>`
   (or the file inside the installed app bundle) with your own LGPL build.
 

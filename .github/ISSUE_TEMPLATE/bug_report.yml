@@ -6,7 +6,7 @@ body:
     attributes:
       value: |
         Thanks for filing a bug! For **security** issues, do not use this form —
-        see our [Security Policy](../security/policy).
+        see our [Security Policy](https://github.com/lifebugz/easyclip/security/policy).
   - type: textarea
     id: what-happened
     attributes:
