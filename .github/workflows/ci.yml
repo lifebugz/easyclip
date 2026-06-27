@@ -93,15 +93,16 @@ jobs:
         if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
-          $url = 'https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-06-11-14-22/ffmpeg-n8.1.1-12-ge0e38acd2f-win64-gpl-8.1.zip'
+          # BtbN 'latest' rolling tag: stable URL (dated autobuild-* tags get pruned -> 404). Re-pin $expected if BtbN rebuilds.
+          $url = 'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n8.1-latest-win64-gpl-8.1.zip'
           $zip = Join-Path $env:RUNNER_TEMP 'ffmpeg-gpl-test.zip'
           Invoke-WebRequest -Uri $url -OutFile $zip
-          $expected = 'ae70466d2c02d7903b29ae7e482bef34b2d805b6543b0c389b84ee2035527e06'
+          $expected = '7e305d64a3cb8c6212d7d67ca57380932c1e636fe38a5f7467a1ca186855f0fa'
           $actual = (Get-FileHash -Algorithm SHA256 -Path $zip).Hash.ToLower()
           if ($actual -ne $expected) { throw "SHA256 mismatch for GPL test ffmpeg: expected $expected, got $actual" }
           $dest = Join-Path $env:RUNNER_TEMP 'ffmpeg-gpl-test'
           Expand-Archive -Path $zip -DestinationPath $dest -Force
-          $bin = Join-Path $dest 'ffmpeg-n8.1.1-12-ge0e38acd2f-win64-gpl-8.1\bin'
+          $bin = Join-Path $dest 'ffmpeg-n8.1-latest-win64-gpl-8.1\bin'
           "EASYCLIP_TEST_FFMPEG=$bin\ffmpeg.exe" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           "EASYCLIP_TEST_FFPROBE=$bin\ffprobe.exe" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
