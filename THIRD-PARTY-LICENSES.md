@@ -11,10 +11,14 @@ Distributed builds additionally include the following third-party components.
 - **Modifications:** none — unmodified upstream binaries
 - **Linkage:** shipped as a separate sidecar executable, invoked as a child
   process; not statically or dynamically linked into the EasyClip binary
-- **Corresponding source:** https://ffmpeg.org/download.html — exact builds &
-  SHA-256 pins in `scripts/ffmpeg-checksums.json`; build sources:
-  https://ffmpeg.martin-riedl.de/ (macOS, Linux) and
-  https://github.com/BtbN/FFmpeg-Builds (Windows)
+- **Corresponding source:** the complete corresponding source for the bundled
+  FFmpeg (8.1) is at https://ffmpeg.org/download.html. For three (3) years from
+  distribution you may also request it via an issue at
+  https://github.com/lifebugz/easyclip, provided at no more than the cost of
+  distribution. Exact builds & SHA-256 pins: `scripts/ffmpeg-checksums.json`.
+  Build sources: https://ffmpeg.martin-riedl.de/ (macOS, Linux); BtbN LGPL
+  builds (https://github.com/BtbN/FFmpeg-Builds), pinned and mirrored at
+  https://github.com/lifebugz/easyclip/releases (Windows)
 - **Your LGPL replace right:** swap `src-tauri/binaries/ffmpeg-<target-triple>`
   (or the file inside the installed app bundle) with your own LGPL build.
 
