@@ -12,3 +12,11 @@ bun.lock
 test-results/
 playwright-report/
 .browser-data/
+
+# Verbatim standard/legal texts — keep byte-exact, do not reformat
+LICENSE
+NOTICE
+THIRD-PARTY-LICENSES.md
+CODE_OF_CONDUCT.md
+# SDD local scratch (git-ignored)
+.superpowers/

@@ -10,6 +10,9 @@ env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: '-D warnings'
 
+permissions:
+  contents: read
+
 jobs:
   check:
     name: ${{ matrix.os }} • bun run check
@@ -29,7 +32,7 @@ jobs:
             bin_ext: ''
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Install Linux deps (Ubuntu only)
         if: matrix.os == 'ubuntu-24.04'
@@ -45,7 +48,7 @@ jobs:
             unzip
 
       - name: Install Bun
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version: latest
 
@@ -55,7 +58,7 @@ jobs:
           components: clippy, rustfmt
 
       - name: Cache cargo
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
           workspaces: ./src-tauri -> target
 
@@ -83,22 +86,24 @@ jobs:
       # The shipped Windows sidecar is BtbN's LGPL build — no GPL encoders
       # (libx264), which the app never needs (-c copy only) but the L1 suite
       # DOES need to GENERATE its h264 fixtures. cargo test therefore runs
-      # against the GPL twin of the same source revision, fetched from a DATED
-      # release tag (immutable, unlike `latest`) and hash-verified. Test
-      # tooling only — the shipped sidecar stays LGPL.
+      # against a GPL build fetched from gyan.dev's immutable, versioned
+      # release (never pruned), hash-verified, and used as TEST TOOLING ONLY —
+      # it is never shipped and never re-hosted by us, so we take on no GPL
+      # redistribution obligation. The shipped sidecar stays LGPL.
       - name: Fetch GPL ffmpeg for L1 fixture generation (Windows only)
         if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
-          $url = 'https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-06-11-14-22/ffmpeg-n8.1.1-12-ge0e38acd2f-win64-gpl-8.1.zip'
+          # gyan.dev versioned release: immutable + never pruned. Re-pin $expected only on a deliberate version bump.
+          $url = 'https://github.com/GyanD/codexffmpeg/releases/download/8.1/ffmpeg-8.1-full_build.zip'
           $zip = Join-Path $env:RUNNER_TEMP 'ffmpeg-gpl-test.zip'
           Invoke-WebRequest -Uri $url -OutFile $zip
-          $expected = 'ae70466d2c02d7903b29ae7e482bef34b2d805b6543b0c389b84ee2035527e06'
+          $expected = '587b1c37de29c5003d01cf65da10001bac43a58b88e61af0fc77c61daff04761'
           $actual = (Get-FileHash -Algorithm SHA256 -Path $zip).Hash.ToLower()
           if ($actual -ne $expected) { throw "SHA256 mismatch for GPL test ffmpeg: expected $expected, got $actual" }
           $dest = Join-Path $env:RUNNER_TEMP 'ffmpeg-gpl-test'
           Expand-Archive -Path $zip -DestinationPath $dest -Force
-          $bin = Join-Path $dest 'ffmpeg-n8.1.1-12-ge0e38acd2f-win64-gpl-8.1\bin'
+          $bin = Join-Path $dest 'ffmpeg-8.1-full_build\bin'
           "EASYCLIP_TEST_FFMPEG=$bin\ffmpeg.exe" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           "EASYCLIP_TEST_FFPROBE=$bin\ffprobe.exe" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 

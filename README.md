@@ -1,16 +1,65 @@
 # EasyClip
 
-A simple, cross-platform desktop media trimmer for non-technical users.
-Trim video and audio files without learning complex software — drag the side anchors to trim ends, click the timeline to remove middle sections. All cuts are lossless via FFmpeg stream-copy / concat-demuxer; zero re-encoding.
+[![CI](https://github.com/lifebugz/easyclip/actions/workflows/ci.yml/badge.svg)](https://github.com/lifebugz/easyclip/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Windows-lightgrey)
 
-EN + HE with full RTL layout. MIT-licensed app, LGPL FFmpeg as bundled sidecar.
+A simple, cross-platform desktop media trimmer for non-technical users. Trim
+video and audio without learning complex software: drag the side anchors to
+trim the ends, click the timeline to remove middle sections. Every cut is
+**lossless** via FFmpeg stream-copy / concat-demuxer — **zero re-encoding**.
 
-See `docs/superpowers/specs/2026-04-26-easyclip-v1-design.md` for the full design.
+Bilingual **English + Hebrew** with full right-to-left (RTL) layout.
 
-## Status
+> Status: pre-1.0, in active development.
 
-In development. Phase 1 (Foundation) in progress.
+## Features
 
-## Build
+- Lossless trimming — FFmpeg stream-copy + concat-demuxer, no re-encode
+- Drag side anchors to trim ends; click the timeline to cut middle sections
+- Keyframe-aware cut placement
+- Visual playback preview with a decorative waveform
+- Bilingual EN / HE with full RTL layout
+- macOS and Windows
 
-Detailed build instructions appear at the end of Phase 1.
+## Built with
+
+Tauri 2 · Svelte 5 / SvelteKit · Bun · Tailwind CSS v4 · FFmpeg (LGPL sidecar)
+
+## Build from source
+
+Prerequisites: [Bun](https://bun.sh) (latest), Rust stable via `rustup` (with
+`clippy` + `rustfmt`), and the platform webview toolchain (see
+[CONTRIBUTING.md](CONTRIBUTING.md) for the per-OS dependency list).
+
+```bash
+bun install --frozen-lockfile
+bunx svelte-kit sync          # generates the gitignored .svelte-kit/tsconfig.json
+bun run setup:ffmpeg          # fetches the SHA-256-pinned LGPL FFmpeg sidecar (never committed)
+bun run dev                   # run the app in development
+bun run build                 # build a release bundle
+```
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). PRs use Conventional Commits and are
+squash-merged into `main`; CI runs on the macOS / Windows / Ubuntu matrix.
+Substantial features get a dated design doc (`docs/*-design.md`).
+
+## Security
+
+See [SECURITY.md](SECURITY.md). Report vulnerabilities privately via GitHub's
+Security tab — please do not open public issues for security reports.
+
+## License
+
+EasyClip's source code is licensed under the [MIT License](LICENSE).
+
+Distributed builds bundle **FFmpeg / ffprobe** as separate sidecar
+executables, which are licensed under the **GNU LGPL-2.1-or-later** — see
+[NOTICE](NOTICE) and [THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md).
+
+## Acknowledgements
+
+[FFmpeg](https://ffmpeg.org/) · [Tauri](https://tauri.app/) and the upstream
+FFmpeg build mirrors (ffmpeg.martin-riedl.de, evermeet.cx, BtbN/FFmpeg-Builds).
