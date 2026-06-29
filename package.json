@@ -42,7 +42,7 @@
     "@wdio/spec-reporter": "^9.27.0",
     "eslint": "^10.2.1",
     "eslint-config-prettier": "^10.1.8",
-    "eslint-plugin-svelte": "^2",
+    "eslint-plugin-svelte": "^3",
     "globals": "^17.5.0",
     "jiti": "^2.6.1",
     "prettier": "^3.8.3",
