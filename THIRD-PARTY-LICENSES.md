@@ -6,7 +6,7 @@ Distributed builds additionally include the following third-party components.
 ## FFmpeg & ffprobe
 
 - **Version:** the FFmpeg 8.1 series — the shipped macOS build is 8.1.1.
-  Unmodified upstream binaries.
+  Unmodified prebuilt binaries from the build projects named below.
 - **License (depends on platform):**
   - **Windows** (x86_64, ARM64): **LGPL-2.1-or-later** — BtbN "lgpl" build,
     configured without `--enable-gpl` / `--enable-nonfree` (excludes
