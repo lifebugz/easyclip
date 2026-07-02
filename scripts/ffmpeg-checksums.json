@@ -1,6 +1,6 @@
 {
   "ffmpegVersion": "8.1",
-  "license": "LGPL",
+  "license": "mixed (Windows: LGPL-2.1-or-later; macOS/Linux: GPL-3.0-or-later)",
   "targets": {
     "aarch64-apple-darwin": {
       "archive": "zip",
