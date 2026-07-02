@@ -4,13 +4,15 @@ Licensed under the MIT License (see LICENSE).
 
 EasyClip's own source code is licensed under the MIT License. It bundles the
 third-party software below as separate sidecar executables, invoked as child
-processes over a command-line interface and NOT linked into the EasyClip
-binary. Because these are independent programs run at arm's length ("mere
-aggregation"), EasyClip is not a derivative work of FFmpeg, and EasyClip's own
-source remains under the MIT License regardless of the FFmpeg build's license.
+processes over a command-line interface and NOT linked (statically or
+dynamically) into the EasyClip binary. Because these are independent programs
+run at arm's length ("mere aggregation"), EasyClip's own source code is not a
+derivative work of FFmpeg and remains under the MIT License. The MIT License
+covers EasyClip's own source ONLY — not the distributed bundle as a whole (see
+"For redistributors" below).
 
-  FFmpeg and ffprobe — version 8.1, unmodified upstream binaries.
-  Copyright (c) the FFmpeg developers.
+  FFmpeg and ffprobe — the FFmpeg 8.1 series (the shipped macOS build is
+  8.1.1), unmodified upstream binaries. Copyright (c) the FFmpeg developers.
 
   The license of the bundled FFmpeg build depends on the platform:
 
@@ -20,29 +22,45 @@ source remains under the MIT License regardless of the FFmpeg build's license.
 
     - macOS (arm64 and x86_64): GNU General Public License, version 3 or later
       (GPL-3.0-or-later). ffmpeg.martin-riedl.de build, configured WITH
-      --enable-gpl (includes libx264 / libx265). EasyClip performs lossless
-      stream copy only ("-c copy") and never uses these encoders, but the
-      binary shipped on macOS is nonetheless GPL-licensed.
+      --enable-gpl and --enable-version3 (statically links libx264, libx265 and
+      other GPL-compatible libraries). EasyClip performs lossless stream copy
+      only ("-c copy") and never invokes these encoders, but the binary shipped
+      on macOS is nonetheless GPL-3.0-licensed.
 
-  Corresponding source: the complete corresponding source code for the exact
-  bundled FFmpeg 8.1 build — including every GPL-covered component — is
-  available from https://ffmpeg.org/download.html together with the build
-  projects that produced the binaries:
-    - Windows: https://github.com/BtbN/FFmpeg-Builds
-    - macOS:   https://ffmpeg.martin-riedl.de/
-  Written offer: for three (3) years from the date of distribution, you may
-  obtain the complete corresponding source for any bundled FFmpeg build by
-  opening an issue at https://github.com/lifebugz/easyclip; it will be provided
-  (or a download location given) at no more than the cost of distribution.
-  The exact builds and SHA-256 checksums are pinned in
-  scripts/ffmpeg-checksums.json; the Windows LGPL archives are additionally
-  mirrored at https://github.com/lifebugz/easyclip/releases.
+  For redistributors: the MIT License above covers EasyClip's own source code
+  ONLY, not the bundle as a whole. The macOS build embeds a GPL-3.0-or-later
+  FFmpeg; if you redistribute the macOS build you are conveying GPL-3.0 software
+  and must comply with the GPL yourself — retain these license texts and pass
+  the Corresponding Source (or the written offer below) to your recipients. The
+  Windows build embeds an LGPL-2.1 FFmpeg and carries the analogous LGPL duties.
 
-  Replace right: because FFmpeg is shipped as a separate executable, you may run
-  a modified FFmpeg by replacing the sidecar binary at
+  Corresponding Source: for a GPL/LGPL FFmpeg binary, the Corresponding Source
+  is the FFmpeg source PLUS the source of every statically-linked GPL/LGPL
+  library in that build, plus the scripts used to build it. For the macOS GPL
+  build that includes (among others) libx264 and libx265. Upstream sources:
+    - FFmpeg 8.1:        https://ffmpeg.org/download.html
+    - x264:              https://code.videolan.org/videolan/x264
+    - x265:              https://bitbucket.org/multicoreware/x265_git
+    - macOS build config/scripts: https://ffmpeg.martin-riedl.de/
+    - Windows LGPL build:         https://github.com/BtbN/FFmpeg-Builds
+  The exact builds and their SHA-256 checksums are pinned in
+  scripts/ffmpeg-checksums.json (Windows LGPL archives are also mirrored at
+  https://github.com/lifebugz/easyclip/releases).
+
+  Written offer (the authoritative source mechanism): for three (3) years from
+  the date of distribution, open an issue at
+  https://github.com/lifebugz/easyclip and we will provide the complete
+  Corresponding Source for the exact bundled build — or a download location for
+  it — at no more than the cost of distribution.
+
+  Modified FFmpeg / replacement: because FFmpeg is shipped as a separate
+  executable, you may run your own build by replacing the sidecar binary at
   src-tauri/binaries/ffmpeg-<target-triple> (or the corresponding file inside
-  the installed application bundle) with your own compatible build. (This is
-  required by the LGPL for the Windows build, and is offered for all platforms.)
+  the installed application; on macOS this may invalidate the app's code
+  signature). For an unmodified, separately-shipped (unlinked) executable the
+  applicable LGPL duties are the notices and source/offer above — the LGPL's
+  relink clause is not separately triggered.
 
 Full third-party license texts — the GNU LGPL v2.1 (Windows sidecar) and the
-GNU GPL v3 (macOS sidecar) — are in THIRD-PARTY-LICENSES.md.
+GNU GPL v3 (macOS sidecar) — are in THIRD-PARTY-LICENSES.md, which is bundled
+with the application on every platform.
