@@ -2,31 +2,47 @@ EasyClip
 Copyright (c) 2026 lifebugz
 Licensed under the MIT License (see LICENSE).
 
-This application bundles the following third-party software as separate
-sidecar executables, invoked as child processes (NOT linked into the EasyClip
-binary):
+EasyClip's own source code is licensed under the MIT License. It bundles the
+third-party software below as separate sidecar executables, invoked as child
+processes over a command-line interface and NOT linked into the EasyClip
+binary. Because these are independent programs run at arm's length ("mere
+aggregation"), EasyClip is not a derivative work of FFmpeg, and EasyClip's own
+source remains under the MIT License regardless of the FFmpeg build's license.
 
-  FFmpeg and ffprobe — version 8.1
-  Licensed under the GNU Lesser General Public License, version 2.1 or later
-  (LGPL-2.1-or-later). Copyright (c) the FFmpeg developers.
+  FFmpeg and ffprobe — version 8.1, unmodified upstream binaries.
+  Copyright (c) the FFmpeg developers.
 
-  These are LGPL builds (configured WITHOUT --enable-gpl and WITHOUT
-  --enable-nonfree) and are unmodified upstream binaries.
+  The license of the bundled FFmpeg build depends on the platform:
 
-  Corresponding source: the complete corresponding source for the bundled
-  FFmpeg (version 8.1) is available from https://ffmpeg.org/download.html.
-  Written offer: for three (3) years from distribution you may also obtain it
-  by opening an issue at https://github.com/lifebugz/easyclip; it will be
-  provided (or a download location given) at no more than the cost of
-  distribution. The exact builds and SHA-256 checksums are pinned in
-  scripts/ffmpeg-checksums.json. Upstream build sources:
+    - Windows (x86_64 and ARM64): GNU Lesser General Public License,
+      version 2.1 or later (LGPL-2.1-or-later). BtbN "lgpl" build, configured
+      WITHOUT --enable-gpl / --enable-nonfree (excludes libx264 / libx265).
+
+    - macOS (arm64 and x86_64): GNU General Public License, version 3 or later
+      (GPL-3.0-or-later). ffmpeg.martin-riedl.de build, configured WITH
+      --enable-gpl (includes libx264 / libx265). EasyClip performs lossless
+      stream copy only ("-c copy") and never uses these encoders, but the
+      binary shipped on macOS is nonetheless GPL-licensed.
+
+  Corresponding source: the complete corresponding source code for the exact
+  bundled FFmpeg 8.1 build — including every GPL-covered component — is
+  available from https://ffmpeg.org/download.html together with the build
+  projects that produced the binaries:
+    - Windows: https://github.com/BtbN/FFmpeg-Builds
     - macOS:   https://ffmpeg.martin-riedl.de/
-    - Windows: BtbN LGPL builds (https://github.com/BtbN/FFmpeg-Builds), pinned
-               and mirrored at https://github.com/lifebugz/easyclip/releases
+  Written offer: for three (3) years from the date of distribution, you may
+  obtain the complete corresponding source for any bundled FFmpeg build by
+  opening an issue at https://github.com/lifebugz/easyclip; it will be provided
+  (or a download location given) at no more than the cost of distribution.
+  The exact builds and SHA-256 checksums are pinned in
+  scripts/ffmpeg-checksums.json; the Windows LGPL archives are additionally
+  mirrored at https://github.com/lifebugz/easyclip/releases.
 
-  LGPL relink/replace right: because FFmpeg is shipped as a SEPARATE
-  executable, you may use a modified FFmpeg by replacing the sidecar binary
-  at src-tauri/binaries/ffmpeg-<target-triple> (or the corresponding file
-  inside the installed application bundle) with your own LGPL-compatible build.
+  Replace right: because FFmpeg is shipped as a separate executable, you may run
+  a modified FFmpeg by replacing the sidecar binary at
+  src-tauri/binaries/ffmpeg-<target-triple> (or the corresponding file inside
+  the installed application bundle) with your own compatible build. (This is
+  required by the LGPL for the Windows build, and is offered for all platforms.)
 
-Full third-party license texts are in THIRD-PARTY-LICENSES.md.
+Full third-party license texts — the GNU LGPL v2.1 (Windows sidecar) and the
+GNU GPL v3 (macOS sidecar) — are in THIRD-PARTY-LICENSES.md.
