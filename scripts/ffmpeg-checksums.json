@@ -7,12 +7,12 @@
       "binaries": {
         "ffmpeg": {
           "url": "https://ffmpeg.martin-riedl.de/redirect/latest/macos/arm64/release/ffmpeg.zip",
-          "sha256": "a05b1a47bb3ac89a95a55eec713f8bbb347051bb07015f3b7d08fb62ed81a21e",
+          "sha256": "ef1aa60006c7b77ce170c1608c08d8e4ba1c30c5746f2ac986ded932d0ac2c3c",
           "pathInArchive": "ffmpeg"
         },
         "ffprobe": {
           "url": "https://ffmpeg.martin-riedl.de/redirect/latest/macos/arm64/release/ffprobe.zip",
-          "sha256": "135e70d2518beeb568183952dbc4bdeca1628dd49a7376d57e6b27dbc57d209f",
+          "sha256": "c39787f4af7a3932502d2d48db6f6feaaa836b48a73ef78c32cc3285df61dfaf",
           "pathInArchive": "ffprobe"
         }
       },
@@ -23,12 +23,12 @@
       "binaries": {
         "ffmpeg": {
           "url": "https://ffmpeg.martin-riedl.de/redirect/latest/macos/amd64/release/ffmpeg.zip",
-          "sha256": "8cb711bfa6f66033112d708dc275220419d0fdb49c5b752f8db25f11a92d321f",
+          "sha256": "a52ef43883f44c219766d4b3bdde4e635b35465d0b704c01c3a0566b59775df9",
           "pathInArchive": "ffmpeg"
         },
         "ffprobe": {
           "url": "https://ffmpeg.martin-riedl.de/redirect/latest/macos/amd64/release/ffprobe.zip",
-          "sha256": "e9b9b83fef584c367b27c683a1172921b4f48fa8bd5df6712ef54e63b915ea50",
+          "sha256": "5408ca588c8c72b0dde3afe676d0a7acf25ef97e55ae6eba5c7bede1cda42695",
           "pathInArchive": "ffprobe"
         }
       },
@@ -39,12 +39,12 @@
       "binaries": {
         "ffmpeg": {
           "url": "https://ffmpeg.martin-riedl.de/redirect/latest/linux/amd64/release/ffmpeg.zip",
-          "sha256": "50b9360d9f0de1555bb4dd354c708427027562624d553e93bb26060059bef16a",
+          "sha256": "56452c0bfc4ee0325cd615d62f46ba8264f62eed34f727c2224c6c84fa7b8719",
           "pathInArchive": "ffmpeg"
         },
         "ffprobe": {
           "url": "https://ffmpeg.martin-riedl.de/redirect/latest/linux/amd64/release/ffprobe.zip",
-          "sha256": "35595494d31fb0d15948199bc7242265929a6dcdb74d7a097bd3f373f840dbeb",
+          "sha256": "c6f2d36e98f9a4445fad0b0be539f4c4faf13fd502116bf131becd53f56cd390",
           "pathInArchive": "ffprobe"
         }
       },
