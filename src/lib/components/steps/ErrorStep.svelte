@@ -20,7 +20,7 @@
     class="flex h-12 w-12 items-center justify-center rounded-full bg-red-100 text-2xl text-red-700"
     aria-hidden="true"
   >
-    {'!'}
+    {/* i18n-exempt */ '!'}
   </div>
   <h1 class="mt-4 text-2xl font-semibold">{t('err.h1')}</h1>
   <p class="mt-2 text-gray-600" data-testid="error-message">{t(messageKey)}</p>
