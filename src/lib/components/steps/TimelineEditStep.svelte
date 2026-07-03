@@ -103,7 +103,7 @@
   <div class="step-head">
     <h1>{t('edit.h1')}</h1>
     <p class="hint">
-      {t('edit.hintBase')}{#if canSnap}{' '}{t('edit.hintKeyframes')}{/if}
+      {t('edit.hintBase')}{#if canSnap}{/* i18n-exempt */ ' '}{t('edit.hintKeyframes')}{/if}
     </p>
   </div>
 
