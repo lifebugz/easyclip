@@ -37,12 +37,13 @@ Distributed builds additionally include the following third-party components.
   https://bitbucket.org/multicoreware/x265_git ; macOS/Linux build scripts —
   https://ffmpeg.martin-riedl.de/ ; Windows LGPL build —
   https://github.com/BtbN/FFmpeg-Builds. Exact builds & SHA-256 pins:
-  `scripts/ffmpeg-checksums.json`; Windows LGPL and macOS/Linux GPL archives
-  mirrored at https://github.com/lifebugz/easyclip/releases.
+  `scripts/ffmpeg-checksums.json`; the Windows LGPL archives and the
+  shipped macOS arm64 / Linux x86_64 GPL archives are also mirrored at
+  https://github.com/lifebugz/easyclip/releases.
 - **Written offer (authoritative):** for three (3) years from distribution,
-  open an issue at https://github.com/lifebugz/easyclip and we will provide the
-  complete Corresponding Source for the exact bundled build (or a download
-  location) at no more than the cost of distribution.
+  open an issue at https://github.com/lifebugz/easyclip/issues and we will
+  provide the complete Corresponding Source for the exact bundled build (or a
+  download location) at no more than the cost of distribution.
 - **Modified FFmpeg / replacement:** swap
   `src-tauri/binaries/ffmpeg-<target-triple>` (or the file inside the installed
   app; on macOS this may break the code signature) with your own build. For an

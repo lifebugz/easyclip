@@ -69,6 +69,14 @@ updates `CHANGELOG.md`, and opens a release PR. Because the repo **squash-merges
 the **minor** (`0.1.0 → 0.2.0`) and keeps us in `0.x` - it does **not** jump to `1.0.0`.
 We cut `1.0.0` deliberately, not by accident.
 
+**Merging the release PR:** the release PR is opened by the default `GITHUB_TOKEN`,
+and GitHub never triggers workflows on events created by that token — so the PR's
+required CI checks stay at _Expected_ forever. This is normal: review the diff
+(three version strings + `CHANGELOG.md`), then an admin merges it using
+"bypass rules". If this friction grows old, the documented upgrade path is giving
+`release-please-action` a fine-grained PAT or GitHub App token so its PRs trigger
+CI like anyone else's.
+
 ## Reporting bugs / requesting features
 
 Use the issue forms (Bug report / Feature request). For security issues, see

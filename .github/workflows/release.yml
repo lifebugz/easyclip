@@ -19,7 +19,7 @@ jobs:
       tag_name: ${{ steps.rp.outputs.tag_name }}
       release_id: ${{ steps.rp.outputs.id }} # numeric GitHub Release id (root-path: top-level, NOT dot-prefixed)
     steps:
-      - uses: googleapis/release-please-action@v4 # SHA-pin as a hardening upgrade
+      - uses: googleapis/release-please-action@v4 # TODO: SHA-pin (hardening upgrade)
         id: rp
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -58,8 +58,9 @@ jobs:
       # PATH (installed by the composite); `bun -e` resolves require() relative to cwd.
       - name: Assert bundle version matches release tag
         shell: bash
+        env:
+          TAG: ${{ needs.release-please.outputs.tag_name }}
         run: |
-          TAG="${{ needs.release-please.outputs.tag_name }}"
           EXPECTED="${TAG#v}"
           ACTUAL="$(bun -e "console.log(require('./src-tauri/tauri.conf.json').version)")"
           if [ "$EXPECTED" != "$ACTUAL" ]; then
@@ -68,7 +69,7 @@ jobs:
           fi
           echo "✓ tag $TAG matches bundle version $ACTUAL"
 
-      - uses: tauri-apps/tauri-action@v0 # SHA-pin as a hardening upgrade
+      - uses: tauri-apps/tauri-action@v0 # TODO: SHA-pin (hardening upgrade)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
@@ -93,6 +94,6 @@ jobs:
       # Flip the draft to public by release id (the v-tag ref doesn't resolve while the
       # release is still a draft; the id we already carry is unambiguous).
       - name: Publish the drafted release
-        run: gh api -X PATCH "repos/${{ github.repository }}/releases/${{ needs.release-please.outputs.release_id }}" -f draft=false
+        run: gh api -X PATCH "repos/${{ github.repository }}/releases/${{ needs.release-please.outputs.release_id }}" -F draft=false
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
