@@ -16,6 +16,7 @@ test('release-please-config wires all three manifests as typed extra-files', asy
     >;
   };
   const pkg = config.packages['.'];
+  if (!pkg) throw new Error("release-please-config packages['.'] entry missing");
   expect(pkg['release-type']).toBe('simple');
   // Without this, a feat!/BREAKING commit at 0.x jumps straight to 1.0.0.
   expect(pkg['bump-minor-pre-major']).toBe(true);
