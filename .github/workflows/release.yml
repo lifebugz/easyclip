@@ -80,7 +80,7 @@ jobs:
         shell: bash
         run: |
           APP="src-tauri/target/${{ matrix.triple }}/release/bundle/macos/EasyClip.app"
-          codesign --verify --verbose=2 "$APP"
+          codesign --verify --deep --strict --verbose=2 "$APP"
           echo "✓ ad-hoc signature verified for $APP"
 
   publish:
