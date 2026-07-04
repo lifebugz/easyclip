@@ -21,9 +21,9 @@ export async function readManifestVersions(root = ROOT): Promise<ManifestVersion
   };
   // Bun parses TOML natively (docs: runtime/toml). The generic default-TOML `version`
   // is top-level; ours lives under [package], so read cargo.package.version explicitly.
-  const cargo = Bun.TOML.parse(
-    await Bun.file(join(root, 'src-tauri', 'Cargo.toml')).text(),
-  ) as { package: { version: string } };
+  const cargo = Bun.TOML.parse(await Bun.file(join(root, 'src-tauri', 'Cargo.toml')).text()) as {
+    package: { version: string };
+  };
   return { packageJson: pkg.version, tauriConf: tauri.version, cargoToml: cargo.package.version };
 }
 

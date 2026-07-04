@@ -4,7 +4,7 @@ import { findVersionMismatches, readManifestVersions } from './check-version-syn
 describe('findVersionMismatches', () => {
   test('returns no errors when all three versions match', () => {
     expect(
-      findVersionMismatches({ packageJson: '0.1.0', tauriConf: '0.1.0', cargoToml: '0.1.0' }),
+      findVersionMismatches({ packageJson: '0.1.0', tauriConf: '0.1.0', cargoToml: '0.1.0' })
     ).toEqual([]);
   });
 
@@ -12,7 +12,7 @@ describe('findVersionMismatches', () => {
     const errors = findVersionMismatches({
       packageJson: '0.2.0',
       tauriConf: '0.1.0',
-      cargoToml: '0.1.0',
+      cargoToml: '0.1.0'
     });
     expect(errors.length).toBeGreaterThan(0);
     expect(errors.join(' ')).toContain('0.2.0');

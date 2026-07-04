@@ -25,13 +25,13 @@ test('release-please-config wires all three manifests as typed extra-files', asy
   expect(byPath['package.json']).toMatchObject({ type: 'json', jsonpath: '$.version' });
   expect(byPath['src-tauri/tauri.conf.json']).toMatchObject({
     type: 'json',
-    jsonpath: '$.version',
+    jsonpath: '$.version'
   });
   // jsonpath is MANDATORY for Cargo.toml: default TOML only bumps a top-level version,
   // not [package].version.
   expect(byPath['src-tauri/Cargo.toml']).toMatchObject({
     type: 'toml',
-    jsonpath: '$.package.version',
+    jsonpath: '$.package.version'
   });
 });
 
