@@ -1,0 +1,62 @@
+name: Setup EasyClip build environment
+description: >-
+  Installs the shared toolchain (Linux webview deps, Bun, Rust + target, cargo
+  cache, JS deps, SvelteKit sync, FFmpeg sidecar) used by BOTH ci.yml checks and
+  the release build. Deliberately does NOT set RUSTFLAGS=-D warnings - that belongs
+  only to ci.yml's check job; in a release build it would fail on any new upstream
+  rustc warning at tag time.
+inputs:
+  rust-targets:
+    description: Comma-separated Rust target triples to install (e.g. aarch64-apple-darwin).
+    required: true
+  rust-components:
+    description: Comma-separated Rust components. CI needs clippy,rustfmt; the release job passes ''.
+    required: false
+    default: clippy,rustfmt
+runs:
+  using: composite
+  steps:
+    - name: Install Linux deps (Ubuntu only)
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          libwebkit2gtk-4.1-dev \
+          libssl-dev \
+          libgtk-3-dev \
+          libayatana-appindicator3-dev \
+          librsvg2-dev \
+          patchelf \
+          unzip
+
+    - name: Install Bun
+      uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+      with:
+        bun-version: latest
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: ${{ inputs.rust-targets }}
+        components: ${{ inputs.rust-components }}
+
+    - name: Cache cargo
+      uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+      with:
+        workspaces: ./src-tauri -> target
+
+    - name: Install JS deps
+      shell: bash
+      run: bun install --frozen-lockfile
+
+    # Generate .svelte-kit/tsconfig.json (gitignored). The root tsconfig extends it;
+    # without this, type-aware steps in `bun run check` fail to resolve types.
+    - name: Sync SvelteKit
+      shell: bash
+      run: bunx svelte-kit sync
+
+    # Load-bearing: bundle.externalBin makes the per-triple sidecar a hard build dependency.
+    - name: Fetch FFmpeg sidecar
+      shell: bash
+      run: bun run setup:ffmpeg
