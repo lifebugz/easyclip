@@ -11,7 +11,7 @@ test('release-please-config wires all three manifests as typed extra-files', asy
         'release-type': string;
         'bump-minor-pre-major': boolean;
         draft: boolean;
-        'extra-files': Array<{ type: string; path: string; jsonpath: string }>;
+        'extra-files': { type: string; path: string; jsonpath: string }[];
       }
     >;
   };

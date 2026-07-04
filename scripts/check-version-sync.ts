@@ -32,7 +32,7 @@ export async function readManifestVersions(root = ROOT): Promise<ManifestVersion
 export function findVersionMismatches(v: ManifestVersions): string[] {
   const distinct = new Set(Object.values(v));
   if (distinct.size <= 1) return [];
-  return Object.entries(v).map(([name, value]) => `${name} = "${value}"`);
+  return Object.entries(v).map(([name, value]: [string, string]) => `${name} = "${value}"`);
 }
 
 async function main(): Promise<void> {
