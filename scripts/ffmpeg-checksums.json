@@ -6,17 +6,17 @@
       "archive": "zip",
       "binaries": {
         "ffmpeg": {
-          "url": "https://ffmpeg.martin-riedl.de/redirect/latest/macos/arm64/release/ffmpeg.zip",
+          "url": "https://github.com/lifebugz/easyclip/releases/download/ffmpeg-sidecars-2026-07-04/ffmpeg-macos-arm64.zip",
           "sha256": "ef1aa60006c7b77ce170c1608c08d8e4ba1c30c5746f2ac986ded932d0ac2c3c",
           "pathInArchive": "ffmpeg"
         },
         "ffprobe": {
-          "url": "https://ffmpeg.martin-riedl.de/redirect/latest/macos/arm64/release/ffprobe.zip",
+          "url": "https://github.com/lifebugz/easyclip/releases/download/ffmpeg-sidecars-2026-07-04/ffprobe-macos-arm64.zip",
           "sha256": "c39787f4af7a3932502d2d48db6f6feaaa836b48a73ef78c32cc3285df61dfaf",
           "pathInArchive": "ffprobe"
         }
       },
-      "source": "ffmpeg.martin-riedl.de"
+      "source": "github.com/lifebugz/easyclip releases (pinned mirror of ffmpeg.martin-riedl.de GPL build)"
     },
     "x86_64-apple-darwin": {
       "archive": "zip",
@@ -38,17 +38,17 @@
       "archive": "zip",
       "binaries": {
         "ffmpeg": {
-          "url": "https://ffmpeg.martin-riedl.de/redirect/latest/linux/amd64/release/ffmpeg.zip",
+          "url": "https://github.com/lifebugz/easyclip/releases/download/ffmpeg-sidecars-2026-07-04/ffmpeg-linux-amd64.zip",
           "sha256": "56452c0bfc4ee0325cd615d62f46ba8264f62eed34f727c2224c6c84fa7b8719",
           "pathInArchive": "ffmpeg"
         },
         "ffprobe": {
-          "url": "https://ffmpeg.martin-riedl.de/redirect/latest/linux/amd64/release/ffprobe.zip",
+          "url": "https://github.com/lifebugz/easyclip/releases/download/ffmpeg-sidecars-2026-07-04/ffprobe-linux-amd64.zip",
           "sha256": "c6f2d36e98f9a4445fad0b0be539f4c4faf13fd502116bf131becd53f56cd390",
           "pathInArchive": "ffprobe"
         }
       },
-      "source": "ffmpeg.martin-riedl.de"
+      "source": "github.com/lifebugz/easyclip releases (pinned mirror of ffmpeg.martin-riedl.de GPL build)"
     },
     "x86_64-pc-windows-msvc": {
       "archive": "zip",
