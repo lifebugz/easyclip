@@ -75,6 +75,14 @@ jobs:
           releaseId: ${{ needs.release-please.outputs.release_id }} # upload into the existing draft
           args: ${{ matrix.args }}
 
+      - name: Verify ad-hoc signature (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          APP="src-tauri/target/${{ matrix.triple }}/release/bundle/macos/EasyClip.app"
+          codesign --verify --verbose=2 "$APP"
+          echo "✓ ad-hoc signature verified for $APP"
+
   publish:
     needs: [release-please, build]
     if: ${{ needs.release-please.outputs.release_created == 'true' }}
