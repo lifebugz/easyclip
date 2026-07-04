@@ -19,7 +19,7 @@ jobs:
       tag_name: ${{ steps.rp.outputs.tag_name }}
       release_id: ${{ steps.rp.outputs.id }} # numeric GitHub Release id (root-path: top-level, NOT dot-prefixed)
     steps:
-      - uses: googleapis/release-please-action@v4 # TODO: SHA-pin (hardening upgrade)
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         id: rp
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -69,7 +69,7 @@ jobs:
           fi
           echo "✓ tag $TAG matches bundle version $ACTUAL"
 
-      - uses: tauri-apps/tauri-action@v0 # TODO: SHA-pin (hardening upgrade)
+      - uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # v1.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
