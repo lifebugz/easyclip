@@ -1,0 +1,90 @@
+name: Release
+on:
+  push:
+    branches: [main]
+
+permissions: {} # granted per-job below
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false # never cancel an in-flight release
+
+jobs:
+  release-please:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write # create release + tag
+      pull-requests: write # open/maintain the release PR
+    outputs:
+      release_created: ${{ steps.rp.outputs.release_created }}
+      tag_name: ${{ steps.rp.outputs.tag_name }}
+      release_id: ${{ steps.rp.outputs.id }} # numeric GitHub Release id (root-path: top-level, NOT dot-prefixed)
+    steps:
+      - uses: googleapis/release-please-action@v4 # SHA-pin as a hardening upgrade
+        id: rp
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  build:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    permissions:
+      contents: write # upload assets
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14 # Apple Silicon only (D4: Intel dropped)
+            triple: aarch64-apple-darwin
+            args: --target aarch64-apple-darwin --bundles app,dmg
+          - os: ubuntu-24.04
+            triple: x86_64-unknown-linux-gnu
+            args: --bundles deb,appimage
+          - os: windows-latest
+            triple: x86_64-pc-windows-msvc
+            args: ''
+    runs-on: ${{ matrix.os }}
+    env:
+      CI: true # GH runners set this already; explicit belt-and-suspenders for the macOS DMG/AppleScript hang (H1)
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0 - match ci.yml
+      - uses: ./.github/actions/setup-easyclip
+        with:
+          rust-targets: ${{ matrix.triple }}
+          rust-components: '' # release build needs no clippy/rustfmt
+
+      # M3: fail loudly if the release tag and the bundled version disagree. bun is on
+      # PATH (installed by the composite); `bun -e` resolves require() relative to cwd.
+      - name: Assert bundle version matches release tag
+        shell: bash
+        run: |
+          TAG="${{ needs.release-please.outputs.tag_name }}"
+          EXPECTED="${TAG#v}"
+          ACTUAL="$(bun -e "console.log(require('./src-tauri/tauri.conf.json').version)")"
+          if [ "$EXPECTED" != "$ACTUAL" ]; then
+            echo "::error::release tag $TAG implies version $EXPECTED but tauri.conf.json is $ACTUAL"
+            exit 1
+          fi
+          echo "✓ tag $TAG matches bundle version $ACTUAL"
+
+      - uses: tauri-apps/tauri-action@v0 # SHA-pin as a hardening upgrade
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          releaseId: ${{ needs.release-please.outputs.release_id }} # upload into the existing draft
+          args: ${{ matrix.args }}
+
+  publish:
+    needs: [release-please, build]
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      # Flip the draft to public by release id (the v-tag ref doesn't resolve while the
+      # release is still a draft; the id we already carry is unambiguous).
+      - name: Publish the drafted release
+        run: gh api -X PATCH "repos/${{ github.repository }}/releases/${{ needs.release-please.outputs.release_id }}" -f draft=false
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
