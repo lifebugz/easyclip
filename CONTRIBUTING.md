@@ -50,6 +50,33 @@ bun run test:layer2           # WebDriver (wdio), if relevant
   `scripts/update-ffmpeg-hashes.ts` / `scripts/ffmpeg-checksums.json` — it is
   **not** managed by Dependabot, so it must be bumped deliberately.
 
+## Conventional Commits & versioning
+
+Releases are automated by [release-please](https://github.com/googleapis/release-please):
+it reads Conventional Commit messages since the last release, bumps the version in all
+three manifests (`package.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`),
+updates `CHANGELOG.md`, and opens a release PR. Because the repo **squash-merges**, the
+**PR title** is the commit release-please parses - make it a valid Conventional Commit.
+
+| Prefix                                             | Release effect                         | Use for                      |
+| -------------------------------------------------- | -------------------------------------- | ---------------------------- |
+| `feat:`                                            | **minor** bump                         | a new user-facing capability |
+| `fix:`                                             | **patch** bump                         | a bug fix                    |
+| `feat!:` or a `BREAKING CHANGE:` footer            | **minor** bump while `0.x` (see below) | an incompatible change       |
+| `chore:` `docs:` `refactor:` `test:` `ci:` `perf:` | no version bump                        | housekeeping                 |
+
+**Pre-1.0 semantics:** we set `bump-minor-pre-major: true`, so a breaking change bumps
+the **minor** (`0.1.0 → 0.2.0`) and keeps us in `0.x` - it does **not** jump to `1.0.0`.
+We cut `1.0.0` deliberately, not by accident.
+
+**Merging the release PR:** the release PR is opened by the default `GITHUB_TOKEN`,
+and GitHub never triggers workflows on events created by that token — so the PR's
+required CI checks stay at _Expected_ forever. This is normal: review the diff
+(three version strings + `CHANGELOG.md`), then an admin merges it using
+"bypass rules". If this friction grows old, the documented upgrade path is giving
+`release-please-action` a fine-grained PAT or GitHub App token so its PRs trigger
+CI like anyone else's.
+
 ## Reporting bugs / requesting features
 
 Use the issue forms (Bug report / Feature request). For security issues, see

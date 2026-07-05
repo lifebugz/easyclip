@@ -34,46 +34,10 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
-      - name: Install Linux deps (Ubuntu only)
-        if: matrix.os == 'ubuntu-24.04'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
-            libssl-dev \
-            libgtk-3-dev \
-            libayatana-appindicator3-dev \
-            librsvg2-dev \
-            patchelf \
-            unzip
-
-      - name: Install Bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+      - name: Set up build environment
+        uses: ./.github/actions/setup-easyclip
         with:
-          bun-version: latest
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy, rustfmt
-
-      - name: Cache cargo
-        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
-        with:
-          workspaces: ./src-tauri -> target
-
-      - name: Install JS deps
-        run: bun install --frozen-lockfile
-
-      # Generate .svelte-kit/tsconfig.json (gitignored). The root tsconfig extends
-      # it, so without this the type-aware lint/tsc/svelte-check steps in `bun run
-      # check` resolve no types and fail with hundreds of "unsafe"/"cannot resolve"
-      # errors. `prepare` runs sync on install too; this step is the explicit guard.
-      - name: Sync SvelteKit
-        run: bunx svelte-kit sync
-
-      - name: Fetch FFmpeg sidecar
-        run: bun run setup:ffmpeg
+          rust-targets: ${{ matrix.triple }}
 
       # L1 binary resolution (resolve_path_binary) consumes these. Defaults
       # point at the fetched sidecars; Windows overrides them below.
