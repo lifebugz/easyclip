@@ -47,7 +47,7 @@ async function main(): Promise<void> {
   }
   if (totalViolations > 0) {
     console.error(
-      `\nFound ${totalViolations.toString()} edit-mode violation(s). The unified editor has no two-mode design — see docs/superpowers/decisions/2026-05-01-unified-editor-no-modes.md.`
+      `\nFound ${totalViolations.toString()} edit-mode violation(s). The unified editor has no two-mode design.`
     );
     process.exit(1);
   }
