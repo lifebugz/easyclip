@@ -36,8 +36,11 @@ runs:
         bun-version: latest
 
     - name: Install Rust
-      uses: dtolnay/rust-toolchain@stable
+      # SHA of the `stable` branch. This action normally selects the toolchain from the
+      # ref name, so a SHA pin REQUIRES the explicit `toolchain:` input below.
+      uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
       with:
+        toolchain: stable
         targets: ${{ inputs.rust-targets }}
         components: ${{ inputs.rust-components }}
 
