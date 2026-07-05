@@ -20,3 +20,7 @@ THIRD-PARTY-LICENSES.md
 CODE_OF_CONDUCT.md
 # SDD local scratch (git-ignored)
 .superpowers/
+
+# Machine-maintained by release-please — its output style is not prettier-conformant
+CHANGELOG.md
+.release-please-manifest.json
