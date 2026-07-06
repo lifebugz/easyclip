@@ -22,6 +22,44 @@ Bilingual **English + Hebrew** with full right-to-left (RTL) layout.
 - Bilingual EN / HE with full RTL layout
 - macOS and Windows
 
+## Install
+
+Download installers from the
+[latest release](https://github.com/lifebugz/easyclip/releases/latest).
+
+### macOS (Apple Silicon only)
+
+Via [Homebrew](https://brew.sh):
+
+```bash
+brew install --cask lifebugz/tap/easyclip
+```
+
+Or download the `.dmg` from the latest release and drag **EasyClip** into
+Applications.
+
+Builds are ad-hoc signed and **not notarized by Apple**, so Gatekeeper blocks
+the first launch. Approve it once, either via **System Settings → Privacy &
+Security → "Open Anyway"** (after the blocked first launch; on older macOS,
+right-click the app → **Open**), or from a terminal:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/EasyClip.app
+```
+
+There is no Intel (x86_64) macOS build.
+
+### Windows (x64)
+
+Download and run the `*-setup.exe` (or the `.msi`) from the latest release.
+The installers are unsigned, so Windows SmartScreen may warn on first run -
+choose **More info → Run anyway**.
+
+### Linux
+
+Unsupported. CI attaches `.AppImage` / `.deb` artifacts to each release, but
+they are untested - use at your own risk.
+
 ## Built with
 
 Tauri 2 · Svelte 5 / SvelteKit · Bun · Tailwind CSS v4 · FFmpeg (LGPL sidecar)
