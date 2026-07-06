@@ -68,8 +68,9 @@ cask "easyclip" do
     EasyClip is ad-hoc signed and is not notarized by Apple, so macOS Gatekeeper
     blocks it the first time you open it. To approve it once, either:
 
-      • Right-click EasyClip in your Applications folder, choose "Open", and
-        confirm in the dialog, or
+      • Open EasyClip once (macOS will block it), then click "Open Anyway"
+        under System Settings > Privacy & Security (System Preferences >
+        Security & Privacy on macOS 12 or earlier), or
       • Run:
           xattr -dr com.apple.quarantine "#{appdir}/EasyClip.app"
 
