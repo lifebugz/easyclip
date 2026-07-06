@@ -35,13 +35,14 @@ Via [Homebrew](https://brew.sh):
 brew install --cask lifebugz/tap/easyclip
 ```
 
-Or download the `.dmg` from the latest release and drag **EasyClip** into
+Or download the `.dmg` from the latest release and drag EasyClip into
 Applications.
 
-Builds are ad-hoc signed and **not notarized by Apple**, so Gatekeeper blocks
-the first launch. Approve it once, either via **System Settings → Privacy &
-Security → "Open Anyway"** (after the blocked first launch; on older macOS,
-right-click the app → **Open**), or from a terminal:
+Builds are ad-hoc signed and not notarized by Apple, so Gatekeeper blocks the
+first launch. Open the app once to trigger the block, then approve it under
+**System Settings → Privacy & Security → "Open Anyway"**. On older macOS you
+can instead right-click the app and choose **Open**. You can also clear the
+quarantine flag from a terminal:
 
 ```bash
 xattr -dr com.apple.quarantine /Applications/EasyClip.app
@@ -52,13 +53,13 @@ There is no Intel (x86_64) macOS build.
 ### Windows (x64)
 
 Download and run the `*-setup.exe` (or the `.msi`) from the latest release.
-The installers are unsigned, so Windows SmartScreen may warn on first run -
-choose **More info → Run anyway**.
+The installers are unsigned, so Windows SmartScreen may warn on first run.
+Choose **More info → Run anyway** to continue.
 
 ### Linux
 
 Unsupported. CI attaches `.AppImage` / `.deb` artifacts to each release, but
-they are untested - use at your own risk.
+they are untested. Use at your own risk.
 
 ## Built with
 
