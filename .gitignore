@@ -42,6 +42,9 @@ Thumbs.db
 # Claude Code (per-machine local config, plugin cache, worktrees)
 .claude/
 
+# Local-only planning docs (specs, plans, design bundles) - never committed
+docs/superpowers/
+
 # Env
 .env
 .env*.local

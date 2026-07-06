@@ -41,14 +41,8 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "externalBin": [
-      "binaries/ffmpeg",
-      "binaries/ffprobe"
-    ],
-    "resources": [
-      "../NOTICE",
-      "../THIRD-PARTY-LICENSES.md"
-    ],
+    "externalBin": ["binaries/ffmpeg", "binaries/ffprobe"],
+    "resources": ["../NOTICE", "../THIRD-PARTY-LICENSES.md"],
     "category": "Video",
     "shortDescription": "Lossless desktop media trimmer",
     "longDescription": "EasyClip is a step-by-step wizard for trimming video and audio files without learning complex software. All cuts are lossless via FFmpeg stream-copy and concat-demuxer."

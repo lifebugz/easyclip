@@ -44,8 +44,7 @@ bun run test:layer2           # WebDriver (wdio), if relevant
   and **no physical CSS axes** — use logical properties for RTL (enforced by
   `scan-physical-axes`).
 - Substantial features get a dated design doc named
-  `YYYY-MM-DD-<slug>-design.md` before code. (Note: `docs/superpowers/` is a
-  local-only convention and is not committed.)
+  `YYYY-MM-DD-<slug>-design.md` before code.
 - The **FFmpeg sidecar is version-pinned manually** via
   `scripts/update-ffmpeg-hashes.ts` / `scripts/ffmpeg-checksums.json` — it is
   **not** managed by Dependabot, so it must be bumped deliberately.
