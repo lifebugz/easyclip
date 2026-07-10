@@ -15,8 +15,9 @@ function render(args: string[]): { code: number; stdout: string; stderr: string 
 }
 
 test('renders byte-identical to the audited tap cask for 0.2.0', async () => {
-  // Fixture fetched verbatim from tap PR #1's Casks/easyclip.rb (the brew-audited
-  // file) - the first render must reproduce it exactly, trailing newline included.
+  // Fixture must stay byte-identical to the tap's Casks/easyclip.rb (the
+  // brew-audited file) - the render must reproduce it exactly, trailing
+  // newline included. Regenerate via: render-brew-cask.sh 0.2.0 <sha> > fixture.
   const expected = await Bun.file(
     join(import.meta.dir, 'testdata', 'easyclip-cask-0.2.0.rb')
   ).text();
