@@ -1,5 +1,7 @@
 import { test, expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
+import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { installTauriMocks } from './helpers/tauri-mocks';
 import type { ProbeMockResult } from './helpers/tauri-mocks';
 
@@ -161,6 +163,60 @@ test('a real video stuck at videoWidth 0 (audio-latched) still falls to poster, 
   // timeout fires failToPoster → poster mode with the extracted-frames note.
   await expect(page.locator('img.preview-poster')).toBeVisible({ timeout: 7000 });
   await expect(page.locator('.preview-note')).toContainText('Showing extracted frames');
+});
+
+test('app-initiated play actually advances the media clock (no self-pause on first tick)', async ({
+  page
+}) => {
+  // Regression guard for the adf0cb6 freeze: the video-as-clock RAF $effect read
+  // `wizardState.playhead` reactively in its body (pendingSeek init), so the
+  // first tick that advanced the playhead re-triggered the effect, whose cleanup
+  // ran el.pause() - and the re-run never calls play() again. Every element-backed
+  // playback (video AND audio) froze within one frame, transport stuck on Pause.
+  // This spec serves REAL media bytes (VP8 - Playwright's Chromium always decodes
+  // it; h264 is not in its open build) so the element genuinely plays, then
+  // asserts the clock advances past the first frame after clicking Play.
+  await installTauriMocks(page, {
+    probeResult: {
+      path: '/fixtures/tiny-playable.webm',
+      duration: 3,
+      container: 'matroska,webm',
+      codec: 'vp8',
+      ext: 'webm',
+      hasAudio: true,
+      keyframes: [0, 1, 2, 3]
+    },
+    convertFileSrcBase: ASSET_STUB_BASE
+  });
+  const fixture = fileURLToPath(new URL('./fixtures/tiny-playable.webm', import.meta.url));
+  await page.route(`${ASSET_STUB_BASE}/**`, (route) => {
+    void route.fulfill({
+      status: 200,
+      contentType: 'video/webm',
+      body: fs.readFileSync(fixture)
+    });
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Choose file…' }).click();
+  await page.getByRole('button', { name: 'Continue' }).click();
+
+  const video = page.locator('video.preview-video');
+  await expect(video).toBeAttached();
+  // Wait for a real decoded first frame so play() starts from a ready element.
+  await expect
+    .poll(async () => video.evaluate((el) => (el as HTMLVideoElement).readyState))
+    .toBeGreaterThanOrEqual(2);
+
+  await page.locator('.play-btn').click();
+  // The element must still be playing AND its clock must clear the first frame.
+  // Under the bug it pauses within ~one RAF tick (currentTime ≈ 0.0–0.1, paused
+  // true) while the transport sticks on Pause, so both assertions go red.
+  await expect
+    .poll(async () => video.evaluate((el) => (el as HTMLVideoElement).currentTime), {
+      timeout: 5000
+    })
+    .toBeGreaterThan(0.5);
+  await expect(video).toHaveJSProperty('paused', false);
 });
 
 test('play() rejected with AbortError resets the transport (no stuck Pause + frozen clock)', async ({

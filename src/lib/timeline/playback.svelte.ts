@@ -4,6 +4,7 @@
 // seeks. With no element bound (poster/art/tests) the controller degrades to
 // the original wall-clock advancePlayhead RAF. wizardState.playhead/playing
 // stay the single source of truth. The .svelte.ts extension is required for $effect.
+import { untrack } from 'svelte';
 import { wizardState } from '$lib/wizard/state.svelte';
 import { advancePlayhead, syncFromMedia, resolvePlayStart } from '$lib/timeline/playback';
 
@@ -124,7 +125,14 @@ export function installPlaybackEffect(): void {
     // as "seek in flight" and holds the resolved playhead instead of re-issuing a
     // redundant boundary seek + nudging the playhead by SEEK_EPSILON. The `seeked`
     // event (or the watchdog) clears it once the element lands.
-    pendingSeek = el.currentTime !== wizardState.playhead;
+    // untrack is load-bearing: this effect must re-run ONLY when `playing`
+    // flips. A tracked `playhead` read here makes the first RAF tick that
+    // advances the playhead re-trigger the effect, whose cleanup calls
+    // el.pause() - and the re-run body never calls play() again, freezing
+    // every element-backed playback at its first frame with the transport
+    // stuck on Pause (the adf0cb6 regression; e2e-guarded by the
+    // "app-initiated play actually advances the media clock" spec).
+    pendingSeek = el.currentTime !== untrack(() => wizardState.playhead);
     const onSeeked = (): void => {
       pendingSeek = false;
     };
