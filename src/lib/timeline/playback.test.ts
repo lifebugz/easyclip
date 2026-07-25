@@ -2,6 +2,7 @@ import { test, expect } from 'bun:test';
 import {
   advancePlayhead,
   playbackTransition,
+  containerNeedsEagerProxy,
   derivePreviewMode,
   derivePreviewNote,
   syncFromMedia,
@@ -142,6 +143,31 @@ test('derivePreviewMode: audio decode-failure + proxy-exhausted rows (existing r
   // The new flags default off - the legacy rows are byte-identical.
   expect(derivePreviewMode({ ...base, audioDecoded: true })).toBe('audio');
   expect(derivePreviewMode({ ...base, hasVideo: true })).toBe('video');
+});
+
+test('containerNeedsEagerProxy: mpegts only - the container that fails SILENTLY', () => {
+  // mpegts is the one measured container this WKWebView neither plays nor
+  // rejects: it reports correct dimensions at loadedmetadata (so the decode
+  // timeout disarms) and then never decodes a frame and never fires `error`.
+  // There is no runtime signal to react to, so the ladder is kicked eagerly
+  // from the probed container name instead. Everything else must stay off this
+  // path - a false positive costs a needless (if cheap) proxy build.
+  expect(containerNeedsEagerProxy('mpegts')).toBe(true);
+  // ffprobe reports format_name as a comma-separated alias list for many
+  // containers; match any member so a future "mpegts,foo" still routes.
+  expect(containerNeedsEagerProxy('mpegts,mpegtsraw')).toBe(true);
+  expect(containerNeedsEagerProxy('MPEGTS')).toBe(true); // defensive: case-fold
+
+  // Containers that fail LOUDLY (error event) - the existing ladder handles
+  // them; kicking eagerly would only duplicate work.
+  expect(containerNeedsEagerProxy('matroska,webm')).toBe(false);
+  expect(containerNeedsEagerProxy('avi')).toBe(false);
+  expect(containerNeedsEagerProxy('asf')).toBe(false);
+  expect(containerNeedsEagerProxy('flv')).toBe(false);
+  expect(containerNeedsEagerProxy('mpeg')).toBe(false); // program stream ≠ transport stream
+  // Containers that play natively - must NEVER trigger a build.
+  expect(containerNeedsEagerProxy('mov,mp4,m4a,3gp,3g2,mj2')).toBe(false);
+  expect(containerNeedsEagerProxy('')).toBe(false);
 });
 
 test('derivePreviewNote: preparing wins while building; poster/unavailable follow the mode', () => {

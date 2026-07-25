@@ -261,6 +261,62 @@ test('undecodable audio-only: Preparing note during the build, art + unavailable
   await expect(page.locator('video.preview-video')).toHaveCount(0);
 });
 
+test('mpegts kicks the proxy eagerly at load - no error event needed', async ({ page }) => {
+  // mpegts fails SILENTLY in WKWebView: valid dimensions at loadedmetadata (so
+  // the decode timeout disarms), then no frame and no `error` - ever. The kick
+  // therefore comes from the probed container name at load. This spec dispatches
+  // NO events at all: the proxy request must appear anyway.
+  await installTauriMocks(page, {
+    probeResult: {
+      path: '/fixtures/camcorder.ts',
+      duration: 30,
+      container: 'mpegts',
+      codec: 'h264',
+      ext: 'ts',
+      hasAudio: true,
+      keyframes: [0, 10, 20, 30]
+    },
+    convertFileSrcBase: ASSET_STUB_BASE,
+    proxyResult: { proxyPath: '/fixtures/proxy/easyclip-proxy-ts.mp4', method: 'remux' }
+  });
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  await page.route(`${ASSET_STUB_BASE}/**`, (_route) => {
+    /* pending forever - mimics mpegts: loads nothing, errors never */
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Choose file…' }).click();
+  await page.getByRole('button', { name: 'Continue' }).click();
+
+  // Poster + a build request, with zero synthetic events dispatched.
+  await expect
+    .poll(async () =>
+      page.evaluate(() => (window as unknown as { __proxyCalls?: unknown[] }).__proxyCalls ?? [])
+    )
+    .toHaveLength(1);
+  const calls = await page.evaluate(
+    () => (window as unknown as { __proxyCalls?: unknown[] }).__proxyCalls
+  );
+  expect(calls?.[0]).toMatchObject({ path: '/fixtures/camcorder.ts', forceTranscode: false });
+  // The resolve swaps the element onto the proxy → live preview.
+  await expect(page.locator('video.preview-video')).toHaveAttribute(
+    'src',
+    `${ASSET_STUB_BASE}/${encodeURIComponent('/fixtures/proxy/easyclip-proxy-ts.mp4')}`
+  );
+});
+
+test('a natively-playable container never triggers an eager proxy build', async ({ page }) => {
+  // Guard on the eager path's blast radius: the mp4 fixture must reach the
+  // editor with the ladder completely untouched.
+  await gotoTimeline(page); // PROBE_MP4 → container 'mov,mp4,m4a,3gp,3g2,mj2'
+  await expect(page.locator('video.preview-video')).toBeAttached();
+  await page.waitForTimeout(500);
+  expect(
+    await page.evaluate(
+      () => (window as unknown as { __proxyCalls?: unknown[] }).__proxyCalls ?? []
+    )
+  ).toHaveLength(0);
+});
+
 test('an exhausted ladder does NOT stop poster playback the user started', async ({ page }) => {
   // The ladder must never yank the transport out from under the user. A video
   // file is already in poster mode when the ladder runs (failToPoster unmounted

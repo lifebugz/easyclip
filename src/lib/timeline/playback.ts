@@ -131,6 +131,28 @@ export function derivePreviewMode(i: PreviewModeInput): PreviewMode {
   return i.hasVideo ? 'video' : 'audio';
 }
 
+/** Containers this WKWebView fails to decode WITHOUT any observable signal.
+ *
+ *  Every other unplayable container fires a MediaError, which the normal ladder
+ *  reacts to. mpegts (`.ts`/`.mts`/`.m2ts`) is the measured exception: the
+ *  element reports correct intrinsic dimensions at `loadedmetadata` - which
+ *  disarms the decode timeout - and then never decodes a frame and never
+ *  errors, leaving a permanently black box. Nothing at runtime distinguishes it
+ *  from a healthy file (both sit at readyState 1 with a real videoWidth), so
+ *  the only reliable discriminator is the probed container name. */
+const EAGER_PROXY_CONTAINERS = new Set(['mpegts']);
+
+/** True when the probed container is a known silent-hang container and the
+ *  preview-proxy ladder must be kicked at load time rather than waiting for a
+ *  decode failure that will never arrive. `container` is ffprobe's
+ *  `format_name`, which is a comma-separated alias list for many formats. */
+export function containerNeedsEagerProxy(container: string): boolean {
+  return container
+    .toLowerCase()
+    .split(',')
+    .some((name) => EAGER_PROXY_CONTAINERS.has(name.trim()));
+}
+
 /** Where the preview-proxy ladder currently stands for the active source. */
 export type ProxyPhase = 'idle' | 'building' | 'done' | 'exhausted';
 

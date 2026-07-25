@@ -3,10 +3,16 @@
   // (video/audio mode) or <img> poster (poster mode) renders on top. The mode is
   // resolved from mediaInfo.hasRealVideo plus the element's runtime decode events.
   // art is the no-regression safety net (today's exact behavior).
+  import { untrack } from 'svelte';
   import { t } from '$lib/i18n/index.svelte';
   import { wizardState } from '$lib/wizard/state.svelte';
   import { togglePlay, bindPreviewMedia } from '$lib/timeline/playback.svelte';
-  import { derivePreviewMode, derivePreviewNote, posterDelayMs } from '$lib/timeline/playback';
+  import {
+    containerNeedsEagerProxy,
+    derivePreviewMode,
+    derivePreviewNote,
+    posterDelayMs
+  } from '$lib/timeline/playback';
   import type { ProxyPhase } from '$lib/timeline/playback';
   import { assetUrl, posterFrame, buildPreviewProxy, cancelPreviewProxy } from '$lib/tauri/preview';
   import {
@@ -27,6 +33,9 @@
   // already distinguishes the two via probe's has_real_video). null mediaInfo
   // (no file picked yet) ⇒ false.
   const hasVideo = $derived(wizardState.mediaInfo?.hasRealVideo ?? false);
+  // ffprobe's format_name - drives the eager-proxy kick for silent-hang
+  // containers (see containerNeedsEagerProxy).
+  const container = $derived(wizardState.mediaInfo?.container ?? '');
 
   // Observational decode state. Reset whenever the ACTIVE source changes (the
   // original file OR a proxy swap - classification re-runs against the proxy).
@@ -101,6 +110,27 @@
     lastProxyMethod = null;
     void cancelPreviewProxy().catch(() => {
       /* outside Tauri (vite dev / e2e without the mock) there is nothing to cancel */
+    });
+
+    // Eager kick for containers that fail SILENTLY (mpegts). Every other
+    // unplayable container fires a MediaError and enters the ladder through
+    // failToPoster; mpegts reports valid dimensions at `loadedmetadata`,
+    // disarming the decode timeout, and then simply never decodes - so waiting
+    // for a runtime signal would wait forever (a permanently black box).
+    //
+    // This lives INSIDE the reset effect, not in a sibling one, on purpose: a
+    // separate $effect would race this one, and if it kicked FIRST the reset
+    // below would bump proxyGen and silently drop the in-flight build's
+    // resolve. Same-effect ordering is guaranteed.
+    //
+    // untrack is load-bearing: failToPoster/kickProxy READ state this very
+    // effect WRITES (proxyPhase, proxyPath, wizardState.playing). Tracked, those
+    // reads make the effect retrigger itself - measured as 1001 build requests
+    // in one page load before this guard. `url` stays the sole trigger.
+    untrack(() => {
+      if (hasVideo && containerNeedsEagerProxy(container)) {
+        failToPoster(); // poster shows extracted frames while the proxy builds
+      }
     });
   });
 
