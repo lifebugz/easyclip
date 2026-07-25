@@ -165,6 +165,178 @@ test('a real video stuck at videoWidth 0 (audio-latched) still falls to poster, 
   await expect(page.locator('.preview-note')).toContainText('Showing extracted frames');
 });
 
+test('video decode error → poster + a preview-proxy build is requested (forceTranscode:false)', async ({
+  page
+}) => {
+  // Ladder rung 1: the existing failToPoster route now ALSO kicks the proxy.
+  // The default mock rejects builds, so the poster note stays put (exhausted).
+  await gotoTimeline(page);
+  const video = page.locator('video.preview-video');
+  await expect(video).toBeAttached();
+  await video.evaluate((el) => el.dispatchEvent(new Event('error')));
+  await expect(page.locator('img.preview-poster')).toBeVisible();
+  await expect
+    .poll(async () =>
+      page.evaluate(() => (window as unknown as { __proxyCalls?: unknown[] }).__proxyCalls ?? [])
+    )
+    .toHaveLength(2); // default build rejects → one forced retry, then exhausted
+  const calls = await page.evaluate(
+    () => (window as unknown as { __proxyCalls?: unknown[] }).__proxyCalls
+  );
+  expect(calls?.[0]).toMatchObject({ path: '/fixtures/sample.mp4', forceTranscode: false });
+  expect(calls?.[1]).toMatchObject({ path: '/fixtures/sample.mp4', forceTranscode: true });
+  // Exhausted video keeps today's bottom rung: poster + its note, never art.
+  await expect(page.locator('.preview-note')).toContainText('Showing extracted frames');
+});
+
+test('proxy resolve swaps the <video> to the proxy src and re-classifies from scratch', async ({
+  page
+}) => {
+  await installTauriMocks(page, {
+    convertFileSrcBase: ASSET_STUB_BASE,
+    proxyResult: { proxyPath: '/fixtures/proxy/easyclip-proxy-cafe.mp4', method: 'transcode' }
+  });
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  await page.route(`${ASSET_STUB_BASE}/**`, (_route) => {
+    /* pending forever - keeps both original and proxy elements mounted */
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Choose file…' }).click();
+  await page.getByRole('button', { name: 'Continue' }).click();
+
+  const video = page.locator('video.preview-video');
+  await expect(video).toBeAttached();
+  await video.evaluate((el) => el.dispatchEvent(new Event('error')));
+  // Poster shows while the proxy builds… then the resolve swaps the src: the
+  // decode-state reset clears `errored`, so the element REMOUNTS pointing at
+  // the proxy (optimistic video mode), and the poster clears.
+  await expect(video).toBeAttached();
+  await expect(video).toHaveAttribute(
+    'src',
+    `${ASSET_STUB_BASE}/${encodeURIComponent('/fixtures/proxy/easyclip-proxy-cafe.mp4')}`
+  );
+  await expect(page.locator('img.preview-poster')).toHaveCount(0);
+  // Task 8 invariant: the swap co-occurs with a play-stop.
+  await expect(page.locator('.play-btn')).toHaveAttribute('aria-label', 'Play');
+});
+
+test('undecodable audio-only: Preparing note during the build, art + unavailable after exhaustion', async ({
+  page
+}) => {
+  test.setTimeout(30_000); // rides through AUDIO_DECODE_TIMEOUT_MS (4s) + 2 builds
+  await installTauriMocks(page, {
+    probeResult: {
+      path: '/fixtures/broken.wma',
+      duration: 30,
+      container: 'asf',
+      codec: '',
+      ext: 'wma',
+      hasAudio: true,
+      keyframes: []
+    },
+    convertFileSrcBase: ASSET_STUB_BASE,
+    proxyDelayMs: 900 // hold 'building' long enough for the note poll to see it
+  });
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  await page.route(`${ASSET_STUB_BASE}/**`, (_route) => {
+    /* pending forever - element stays at readyState 0 (undecodable audio) */
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Choose file…' }).click();
+  await page.getByRole('button', { name: 'Continue' }).click();
+
+  // Before the ladder: silent invisible audio (no note, element mounted).
+  await expect(page.locator('video.preview-video.audio-only')).toBeAttached();
+  await expect(page.locator('.preview-note')).toHaveCount(0);
+  // At AUDIO_DECODE_TIMEOUT_MS the watchdog fires (readyState still 0) and the
+  // build starts - the note appears instead of the old silent-forever gap.
+  await expect(page.locator('.preview-note')).toContainText('Preparing preview', {
+    timeout: 7000
+  });
+  // Both builds reject (default) → exhausted → art + unavailable note, and the
+  // dead element unmounts.
+  await expect(page.locator('.preview-note')).toContainText("Live preview isn't available", {
+    timeout: 5000
+  });
+  await expect(page.locator('video.preview-video')).toHaveCount(0);
+});
+
+test('an exhausted ladder does NOT stop poster playback the user started', async ({ page }) => {
+  // The ladder must never yank the transport out from under the user. A video
+  // file is already in poster mode when the ladder runs (failToPoster unmounted
+  // the element and stopped playback at THAT moment); poster playback runs on
+  // the virtual wall-clock RAF with no element bound, so exhaustion later has
+  // nothing to tear down. Stopping playback there made the two timeline-edit
+  // play/pause specs flake ~8% of runs (whenever the click landed inside the
+  // build window). The audio-only case is different - exhaustion unmounts the
+  // element (mode → art), so its play-stop stays.
+  await installTauriMocks(page, {
+    convertFileSrcBase: ASSET_STUB_BASE,
+    proxyDelayMs: 400 // hold each rung so the Play click lands mid-build
+  });
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  await page.route(`${ASSET_STUB_BASE}/**`, (_route) => {
+    /* pending forever */
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Choose file…' }).click();
+  await page.getByRole('button', { name: 'Continue' }).click();
+
+  const video = page.locator('video.preview-video');
+  await expect(video).toBeAttached();
+  await video.evaluate((el) => el.dispatchEvent(new Event('error')));
+  await expect(page.locator('img.preview-poster')).toBeVisible();
+
+  // User presses Play while rung 1 is still building.
+  const playBtn = page.locator('.play-btn');
+  await playBtn.click();
+  await expect(playBtn).toHaveAttribute('aria-label', 'Pause');
+
+  // Both rungs reject (~400ms each) → exhausted. Playback must survive.
+  await expect
+    .poll(
+      async () =>
+        page.evaluate(() => (window as unknown as { __proxyCalls?: unknown[] }).__proxyCalls ?? []),
+      { timeout: 5000 }
+    )
+    .toHaveLength(2);
+  await expect(page.locator('.preview-note')).toContainText('Showing extracted frames');
+  await expect(playBtn).toHaveAttribute('aria-label', 'Pause');
+});
+
+test('a REMUX proxy that fails decode retries once with forceTranscode:true', async ({ page }) => {
+  await installTauriMocks(page, {
+    convertFileSrcBase: ASSET_STUB_BASE,
+    proxyResult: { proxyPath: '/fixtures/proxy/easyclip-proxy-beef.mp4', method: 'remux' }
+  });
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  await page.route(`${ASSET_STUB_BASE}/**`, (_route) => {
+    /* pending forever */
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Choose file…' }).click();
+  await page.getByRole('button', { name: 'Continue' }).click();
+
+  const video = page.locator('video.preview-video');
+  await expect(video).toBeAttached();
+  // Original fails → build #1 (remux) resolves → element remounts on the proxy.
+  await video.evaluate((el) => el.dispatchEvent(new Event('error')));
+  const proxySrc = `${ASSET_STUB_BASE}/${encodeURIComponent('/fixtures/proxy/easyclip-proxy-beef.mp4')}`;
+  await expect(video).toHaveAttribute('src', proxySrc);
+  // The remux proxy ALSO fails decode → rung 2 must force a transcode.
+  await video.evaluate((el) => el.dispatchEvent(new Event('error')));
+  await expect
+    .poll(async () =>
+      page.evaluate(() => (window as unknown as { __proxyCalls?: unknown[] }).__proxyCalls ?? [])
+    )
+    .toHaveLength(2);
+  const calls = await page.evaluate(
+    () => (window as unknown as { __proxyCalls?: unknown[] }).__proxyCalls
+  );
+  expect(calls?.[0]).toMatchObject({ forceTranscode: false });
+  expect(calls?.[1]).toMatchObject({ forceTranscode: true });
+});
+
 test('app-initiated play actually advances the media clock (no self-pause on first tick)', async ({
   page
 }) => {

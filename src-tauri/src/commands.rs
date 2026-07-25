@@ -4,6 +4,7 @@
 use crate::error::AppError;
 use crate::ffmpeg::invoker::FfmpegInvoker;
 use crate::ffmpeg::probe::ProbeCommand;
+use crate::ffmpeg::proxy_run::{run_proxy, ProxyEvent, ProxyResult, ProxyState};
 use crate::ffmpeg::MediaInfo;
 use crate::processing::plan::{build_plan, KeptRange};
 use crate::processing::{run_processing, ProcessingEvent, ProcessingResult, ProcessingState};
@@ -113,8 +114,55 @@ pub async fn process_media(
     Ok(result)
 }
 
+/// Build (or fetch from cache) a WebKit-playable preview proxy for a file the
+/// webview failed to decode. Preview-only: trim/export always use the original.
+#[tauri::command]
+pub async fn build_preview_proxy(
+    path: String,
+    force_transcode: bool,
+    on_event: Channel<ProxyEvent>,
+    app: tauri::AppHandle,
+    invoker: tauri::State<'_, FfmpegInvokerHandle>,
+    state: tauri::State<'_, ProxyState>,
+) -> Result<ProxyResult, AppError> {
+    use tauri::Manager;
+    let cache_dir = app
+        .path()
+        .app_cache_dir()
+        .map_err(|e| AppError::Unknown {
+            details: format!("app cache dir: {e}"),
+        })?
+        .join("preview-proxies");
+    let emit = move |ev: ProxyEvent| {
+        // Sends after webview teardown error harmlessly (same as processing).
+        let _ = on_event.send(ev);
+    };
+    run_proxy(
+        invoker.inner().as_ref(),
+        state.inner(),
+        &path,
+        &cache_dir,
+        force_transcode,
+        &emit,
+    )
+    .await
+}
+
+/// Idempotent mirror of cancel_processing for the proxy job.
+#[tauri::command]
+pub fn cancel_preview_proxy(state: tauri::State<'_, ProxyState>) {
+    let kill = {
+        let mut j = state.lock().unwrap();
+        j.cancel_requested = true;
+        j.kill.take()
+    };
+    if let Some(k) = kill {
+        k();
+    }
+}
+
 /// Idempotent: no active job → flag set + no kill = harmless no-op (the
-/// next claim resets the flag — spec §6/B3).
+/// next claim resets the flag - spec §6/B3).
 #[tauri::command]
 pub fn cancel_processing(job: tauri::State<'_, ProcessingState>) {
     let kill = {

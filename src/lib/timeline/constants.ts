@@ -23,3 +23,11 @@ export const POSTER_SCRUB_DEBOUNCE_MS = 150;
  *  back to codec-only routing (poster when hasVideo, else art) so the box never
  *  hangs (§3). */
 export const DECODE_TIMEOUT_MS = 4000;
+
+/** Audio decode timeout (ms): an audio-only file whose element is still at
+ *  readyState 0 after this long is treated as undecodable and routed to the
+ *  preview-proxy ladder. Deliberately a SEPARATE constant from
+ *  DECODE_TIMEOUT_MS: audio has no poster to fall to, and a slow-loading but
+ *  playable file that trips this merely triggers a harmless remux (the proxy
+ *  swap re-classifies and plays). */
+export const AUDIO_DECODE_TIMEOUT_MS = 4000;

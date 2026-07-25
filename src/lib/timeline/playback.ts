@@ -102,23 +102,49 @@ export type PreviewMode = 'video' | 'poster' | 'audio' | 'art';
 
 export interface PreviewModeInput {
   hasSource: boolean; // assetUrl(path) !== null
-  hasVideo: boolean; // mediaInfo.hasRealVideo (NOT codec !== '' — codec can be '' for a real video)
+  hasVideo: boolean; // mediaInfo.hasRealVideo (NOT codec !== '' - codec can be '' for a real video)
   decoded: boolean; // <video> fired loadedmetadata with a real frame (videoWidth>0), no prior error
   audioDecoded: boolean; // element fired loadedmetadata with videoWidth===0, no prior error
   errored: boolean; // MediaError fired, OR the classification timeout elapsed
+  /** Audio-only file whose element never reached readyState ≥ 1 within
+   *  AUDIO_DECODE_TIMEOUT_MS. Distinct from `errored` on purpose: the spurious
+   *  MediaError no-op for audio files must stay a no-op. Optional so legacy
+   *  call sites/tests are unchanged. */
+  audioFailed?: boolean;
+  /** The proxy ladder ran out (remux and transcode both failed). */
+  proxyExhausted?: boolean;
 }
 
 /** Resolve the preview mode from the static codec signal plus the element's
  *  runtime decode outcome (§3). `errored` is checked first so a LATE error after
  *  a `video` classification reroutes to `poster`. The pending (no-event) case
  *  stays optimistic (video/audio) so the <video> stays mounted and can load;
- *  the art backdrop shows behind it until a frame decodes. */
+ *  the art backdrop shows behind it until a frame decodes. An audio decode
+ *  failure keeps mode 'audio' (element mounted, invisible) while the proxy
+ *  ladder runs - only exhaustion demotes to 'art', which unmounts the element. */
 export function derivePreviewMode(i: PreviewModeInput): PreviewMode {
   if (!i.hasSource) return 'art';
+  if ((i.audioFailed ?? false) && (i.proxyExhausted ?? false) && !i.hasVideo) return 'art';
   if (i.errored) return i.hasVideo ? 'poster' : 'art';
   if (i.decoded) return 'video';
   if (i.audioDecoded) return 'audio';
   return i.hasVideo ? 'video' : 'audio';
+}
+
+/** Where the preview-proxy ladder currently stands for the active source. */
+export type ProxyPhase = 'idle' | 'building' | 'done' | 'exhausted';
+
+export type PreviewNote = 'preparing' | 'poster' | 'unavailable' | null;
+
+/** Resolve which status note the preview box shows. 'preparing' wins while a
+ *  proxy build is in flight (poster keeps showing frames underneath it); once
+ *  settled, the note follows the mode: poster explains the slideshow, art
+ *  means no preview at all. */
+export function derivePreviewNote(i: { mode: PreviewMode; proxyPhase: ProxyPhase }): PreviewNote {
+  if (i.proxyPhase === 'building') return 'preparing';
+  if (i.mode === 'poster') return 'poster';
+  if (i.mode === 'art') return 'unavailable';
+  return null;
 }
 
 /** Small fixed nudge past a cut boundary so a boundary seek clears the keyframe

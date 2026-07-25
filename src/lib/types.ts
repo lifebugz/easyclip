@@ -58,3 +58,14 @@ export interface ProcessingResult {
   removedDuration: number;
   segmentCount: number;
 }
+
+/** Streamed while a preview proxy builds. `fraction: null` = indeterminate
+ *  (the re-probe reported a non-finite duration - no honest percentage). */
+export interface ProxyProgressEvent {
+  fraction: number | null;
+}
+
+export interface ProxyResult {
+  proxyPath: string;
+  method: 'remux' | 'transcode';
+}

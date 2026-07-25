@@ -5,6 +5,9 @@ pub mod invoker;
 pub mod poster;
 pub mod probe;
 pub mod progress;
+pub mod proxy;
+pub mod proxy_cache;
+pub mod proxy_run;
 pub mod trim;
 
 use serde::Serialize;

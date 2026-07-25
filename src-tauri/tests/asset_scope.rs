@@ -118,3 +118,34 @@ fn denies_non_media_and_sensitive_files() {
         );
     }
 }
+
+#[test]
+fn allows_preview_proxy_outputs_and_denies_their_part_files() {
+    // The preview-proxy feature swaps the <video> src to a cache-dir proxy —
+    // `preview-proxies/easyclip-proxy-<16hex>.mp4|.m4a`. Those must load via
+    // asset:// with NO config change (extension matching covers any depth).
+    // The in-flight `.part` must stay unreadable: a half-written proxy served
+    // to the webview would reproduce the exact hung-preview bug the proxy
+    // exists to fix.
+    let patterns = allow_patterns();
+    let opts = scope_options();
+    let cache = "/Users/me/Library/Caches/com.easyclip.app/preview-proxies";
+    for ok in [
+        format!("{cache}/easyclip-proxy-0123456789abcdef.mp4"),
+        format!("{cache}/easyclip-proxy-0123456789abcdef.m4a"),
+    ] {
+        assert!(
+            is_allowed(&ok, &patterns, &opts),
+            "proxy output must be previewable via asset://: {ok}"
+        );
+    }
+    for denied in [
+        format!("{cache}/easyclip-proxy-0123456789abcdef.mp4.part"),
+        format!("{cache}/easyclip-proxy-0123456789abcdef.m4a.part"),
+    ] {
+        assert!(
+            !is_allowed(&denied, &patterns, &opts),
+            "in-flight .part must be unreadable via asset://: {denied}"
+        );
+    }
+}

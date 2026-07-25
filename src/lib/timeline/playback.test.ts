@@ -3,6 +3,7 @@ import {
   advancePlayhead,
   playbackTransition,
   derivePreviewMode,
+  derivePreviewNote,
   syncFromMedia,
   posterDelayMs,
   resolvePlayStart,
@@ -119,6 +120,40 @@ test('derivePreviewMode: table over source/video/decode/error', () => {
   expect(derivePreviewMode({ ...base, hasVideo: false })).toBe('audio');
   // Late error AFTER a video classification reroutes to poster (errored wins).
   expect(derivePreviewMode({ ...base, decoded: true, errored: true })).toBe('poster');
+});
+
+test('derivePreviewMode: audio decode-failure + proxy-exhausted rows (existing rows unchanged)', () => {
+  const base = {
+    hasSource: true,
+    hasVideo: false,
+    decoded: false,
+    audioDecoded: false,
+    errored: false
+  };
+  // Audio failed but the proxy ladder is still running → stay 'audio': the
+  // <video> must remain mounted so the proxy src-swap can re-classify it.
+  expect(derivePreviewMode({ ...base, audioFailed: true })).toBe('audio');
+  // Audio failed AND the proxy ladder is exhausted → art (+ unavailable note).
+  expect(derivePreviewMode({ ...base, audioFailed: true, proxyExhausted: true })).toBe('art');
+  // A VIDEO file with an exhausted proxy stays poster (today's bottom rung).
+  expect(derivePreviewMode({ ...base, hasVideo: true, errored: true, proxyExhausted: true })).toBe(
+    'poster'
+  );
+  // The new flags default off - the legacy rows are byte-identical.
+  expect(derivePreviewMode({ ...base, audioDecoded: true })).toBe('audio');
+  expect(derivePreviewMode({ ...base, hasVideo: true })).toBe('video');
+});
+
+test('derivePreviewNote: preparing wins while building; poster/unavailable follow the mode', () => {
+  expect(derivePreviewNote({ mode: 'poster', proxyPhase: 'building' })).toBe('preparing');
+  expect(derivePreviewNote({ mode: 'audio', proxyPhase: 'building' })).toBe('preparing');
+  expect(derivePreviewNote({ mode: 'poster', proxyPhase: 'idle' })).toBe('poster');
+  expect(derivePreviewNote({ mode: 'poster', proxyPhase: 'exhausted' })).toBe('poster');
+  expect(derivePreviewNote({ mode: 'art', proxyPhase: 'exhausted' })).toBe('unavailable');
+  expect(derivePreviewNote({ mode: 'art', proxyPhase: 'idle' })).toBe('unavailable');
+  expect(derivePreviewNote({ mode: 'video', proxyPhase: 'idle' })).toBeNull();
+  expect(derivePreviewNote({ mode: 'video', proxyPhase: 'done' })).toBeNull();
+  expect(derivePreviewNote({ mode: 'audio', proxyPhase: 'idle' })).toBeNull();
 });
 
 const SYNC = { trimStart: 0, trimEnd: 120, seekInFlight: false };

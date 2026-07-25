@@ -18,6 +18,10 @@ pub struct ProbedFields {
     /// but are NOT decodable timelines — they must not enable `canSnap` or
     /// route the file to video/poster mode (§3.1).
     pub has_real_video: bool,
+    /// Codec of the FIRST audio stream ("" when none / unidentifiable). Feeds
+    /// the preview-proxy remux-vs-transcode decision; NOT forwarded to the
+    /// frontend MediaInfo (no wire change).
+    pub audio_codec: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -69,6 +73,7 @@ pub fn parse_probe_json(stdout: &str) -> Result<ProbedFields, AppError> {
     let container = parsed.format.format_name.unwrap_or_default();
 
     let mut codec = String::new();
+    let mut audio_codec = String::new();
     let mut has_audio = false;
     let mut has_real_video = false;
     for s in &parsed.streams {
@@ -92,6 +97,11 @@ pub fn parse_probe_json(stdout: &str) -> Result<ProbedFields, AppError> {
             }
             Some("audio") => {
                 has_audio = true;
+                // First identifiable audio codec wins - same recovery rule as
+                // the video codec above (an unnamed first stream must not latch "").
+                if audio_codec.is_empty() {
+                    audio_codec = s.codec_name.clone().unwrap_or_default();
+                }
             }
             _ => {}
         }
@@ -103,6 +113,7 @@ pub fn parse_probe_json(stdout: &str) -> Result<ProbedFields, AppError> {
         codec,
         has_audio,
         has_real_video,
+        audio_codec,
     })
 }
 
@@ -213,6 +224,36 @@ mod tests {
         let p = parse_probe_json(JSON_VIDEO_ONLY).unwrap();
         assert!(!p.has_audio);
         assert_eq!(p.codec, "vp9");
+    }
+
+    #[test]
+    fn parse_probe_json_retains_first_audio_codec() {
+        // The proxy decision (remux vs transcode) needs the audio codec name;
+        // the FIRST audio stream is authoritative, matching the video rule.
+        let p = parse_probe_json(JSON_HAPPY).unwrap();
+        assert_eq!(p.audio_codec, "aac");
+    }
+
+    #[test]
+    fn parse_probe_json_audio_codec_empty_when_no_audio() {
+        let p = parse_probe_json(JSON_VIDEO_ONLY).unwrap();
+        assert_eq!(p.audio_codec, "");
+    }
+
+    #[test]
+    fn parse_probe_json_audio_codec_recovers_from_later_stream() {
+        // Mirror of the video-codec recovery rule: a first audio stream with no
+        // codec_name must not latch "" when a later audio stream identifies one.
+        let json = r#"{
+          "format": { "duration": "5.0", "format_name": "mov,mp4" },
+          "streams": [
+            { "codec_type": "audio" },
+            { "codec_type": "audio", "codec_name": "aac" }
+          ]
+        }"#;
+        let p = parse_probe_json(json).unwrap();
+        assert_eq!(p.audio_codec, "aac");
+        assert!(p.has_audio);
     }
 
     #[test]

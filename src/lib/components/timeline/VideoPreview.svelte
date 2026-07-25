@@ -6,12 +6,14 @@
   import { t } from '$lib/i18n/index.svelte';
   import { wizardState } from '$lib/wizard/state.svelte';
   import { togglePlay, bindPreviewMedia } from '$lib/timeline/playback.svelte';
-  import { derivePreviewMode, posterDelayMs } from '$lib/timeline/playback';
-  import { assetUrl, posterFrame } from '$lib/tauri/preview';
+  import { derivePreviewMode, derivePreviewNote, posterDelayMs } from '$lib/timeline/playback';
+  import type { ProxyPhase } from '$lib/timeline/playback';
+  import { assetUrl, posterFrame, buildPreviewProxy, cancelPreviewProxy } from '$lib/tauri/preview';
   import {
     POSTER_MIN_SPACING_MS,
     POSTER_SCRUB_DEBOUNCE_MS,
-    DECODE_TIMEOUT_MS
+    DECODE_TIMEOUT_MS,
+    AUDIO_DECODE_TIMEOUT_MS
   } from '$lib/timeline/constants';
   import { formatTimecodePrecise } from '$lib/timeline/format';
   import { pathStem } from '$lib/util/path';
@@ -26,7 +28,8 @@
   // (no file picked yet) ⇒ false.
   const hasVideo = $derived(wizardState.mediaInfo?.hasRealVideo ?? false);
 
-  // Observational decode state. Reset whenever the source path changes.
+  // Observational decode state. Reset whenever the ACTIVE source changes (the
+  // original file OR a proxy swap - classification re-runs against the proxy).
   let videoEl = $state<HTMLVideoElement | null>(null);
   let decodedAsVideo = $state(false);
   let decodedAsAudio = $state(false);
@@ -35,18 +38,41 @@
   // a new poster-mode file never shows the previous file's frame (see reset below).
   let posterSrc = $state<string | null>(null);
 
+  // ── Preview-proxy ladder state (§B) ──
+  // When runtime decode fails, the Rust side builds a WebKit-playable proxy
+  // (remux or transcode) and the <video> src swaps to it. Preview-only: poster
+  // extraction and trim/export always use the ORIGINAL path.
+  let proxyPath = $state<string | null>(null);
+  let proxyPhase = $state<ProxyPhase>('idle');
+  let proxyFraction = $state<number | null>(null);
+  let audioFailed = $state(false);
+  // Method of the last RESOLVED proxy - decides whether a decode-failure of the
+  // proxy itself retries with forceTranscode (remux → transcode) or exhausts.
+  let lastProxyMethod: 'remux' | 'transcode' | null = null;
+  let proxyGen = 0; // stale-async guard, à la posterGen
+
+  // The URL the <video> element actually plays: the proxy once built, else the
+  // original. Decode-observation effects key on THIS, the full-reset effect
+  // keys on `url` (original path) - a proxy swap must not wipe proxy state.
+  const activeUrl = $derived(proxyPath !== null ? assetUrl(proxyPath) : url);
+
   const previewMode = $derived(
     derivePreviewMode({
       hasSource: url !== null,
       hasVideo,
       decoded: decodedAsVideo,
       audioDecoded: decodedAsAudio,
-      errored
+      errored,
+      audioFailed,
+      proxyExhausted: proxyPhase === 'exhausted'
     })
   );
 
-  // Reset observational state on a new source (new file / Edit re-entry). Also
-  // clear the previous file's poster: without this, switching A→B when both route
+  const previewNote = $derived(derivePreviewNote({ mode: previewMode, proxyPhase }));
+
+  // Reset observational state on any ACTIVE source change (new file OR proxy
+  // swap - the proxy must be re-classified from scratch). Also clear the
+  // previous source's poster: without this, switching A→B when both route
   // to poster mode keeps `previewMode === 'poster' && posterSrc !== null` true, so
   // A's last extracted frame shows in B's box until B's first extract resolves.
   // Bumping posterGen here is load-bearing: nulling posterSrc alone is not enough,
@@ -54,12 +80,28 @@
   // await) would re-satisfy `myGen === posterGen` on resolve and repaint A's frame
   // into B's box. Invalidating the generation drops that stale resolve.
   $effect(() => {
-    void url;
+    void activeUrl;
     decodedAsVideo = false;
     decodedAsAudio = false;
     errored = false;
     posterSrc = null;
     posterGen++;
+  });
+
+  // Full reset on a NEW ORIGINAL source only (new file / Edit re-entry): tear
+  // down the whole proxy ladder and cancel any in-flight build. Deliberately
+  // does NOT read proxy state (it writes it) - `url` is the only dependency.
+  $effect(() => {
+    void url;
+    proxyGen++; // drop stale build resolves/progress
+    proxyPath = null;
+    proxyPhase = 'idle';
+    proxyFraction = null;
+    audioFailed = false;
+    lastProxyMethod = null;
+    void cancelPreviewProxy().catch(() => {
+      /* outside Tauri (vite dev / e2e without the mock) there is nothing to cancel */
+    });
   });
 
   // Route to poster and stop playback (Task 8 invariant: every video→poster
@@ -80,6 +122,76 @@
     if (!hasVideo) return;
     errored = true;
     if (wizardState.playing) wizardState.playing = false;
+    // Ladder (§B): poster shows immediately; a playable proxy builds behind it.
+    kickProxy(false);
+  }
+
+  // ── Preview-proxy ladder ──
+  // kickProxy(fromBuildFailure): decide the next rung and launch it.
+  //  attempt 1  - original failed decode → build with forceTranscode:false
+  //               (Rust re-probes and picks remux vs transcode);
+  //  attempt 2  - a REMUX proxy failed decode → forceTranscode:true (the
+  //               copied codecs were the problem after all);
+  //  exhausted  - a transcode proxy failed decode, a second build failed, or
+  //               a forced build failed: video stays poster (today's bottom
+  //               rung), audio demotes to art + unavailable note.
+  // Bottom rung. The play-stop here is `!hasVideo`-ONLY, and that asymmetry is
+  // load-bearing:
+  //  • audio-only - exhaustion flips the mode to 'art', which UNMOUNTS the
+  //    <video>. Task 8 invariant: an unmount must co-occur with a play-stop, or
+  //    the controller's RAF keeps reading the detached element's frozen clock.
+  //  • video - the element is ALREADY gone (failToPoster unmounted it and
+  //    stopped playback at that moment) and poster mode runs on the virtual
+  //    wall-clock RAF with nothing bound. Stopping here would yank the transport
+  //    away from a user who pressed Play while the ladder was still building -
+  //    it made the timeline-edit play/pause specs flake ~8% of runs.
+  function exhaustLadder(): void {
+    proxyPhase = 'exhausted';
+    if (!hasVideo && wizardState.playing) wizardState.playing = false;
+  }
+
+  function kickProxy(fromBuildFailure: boolean): void {
+    if (proxyPhase === 'building' || proxyPhase === 'exhausted') return;
+    // Which rung is this?
+    let force = false;
+    if (fromBuildFailure) {
+      force = true; // a default build failed - one forced retry, then exhausted
+    } else if (proxyPath !== null) {
+      // The PROXY itself failed decode. A transcode proxy failing means the
+      // ladder is out of moves; a remux proxy retries as transcode.
+      if (lastProxyMethod !== 'remux') {
+        exhaustLadder();
+        return;
+      }
+      force = true;
+    }
+    proxyPhase = 'building';
+    proxyFraction = null;
+    const myGen = ++proxyGen;
+    const wasForced = force;
+    buildPreviewProxy(path, force, (e) => {
+      if (myGen === proxyGen) proxyFraction = e.fraction;
+    })
+      .then((r) => {
+        if (myGen !== proxyGen) return; // stale: source changed since launch
+        lastProxyMethod = r.method;
+        proxyPath = r.proxyPath; // activeUrl flips → decode state resets
+        proxyPhase = 'done';
+        audioFailed = false; // the proxy gets a fresh audio-decode budget
+        // Task 8 invariant: every src swap co-occurs with a play-stop so the
+        // controller re-binds cleanly to the remounted element.
+        if (wizardState.playing) wizardState.playing = false;
+      })
+      .catch(() => {
+        if (myGen !== proxyGen) return;
+        if (!wasForced) {
+          // A remux build can fail where a transcode succeeds - one retry.
+          proxyPhase = 'idle';
+          kickProxy(true);
+        } else {
+          exhaustLadder();
+        }
+      });
   }
 
   // True once the element has decoded a real frame (codec present AND videoWidth>0).
@@ -110,9 +222,33 @@
   // poster" and its art backdrop already shows behind the invisible <video>, so the
   // "no hung box" rationale doesn't apply — leave it in 'audio' to load + play.
   $effect(() => {
-    void url;
-    if (url === null || !hasVideo || decodedAsVideo || errored) return;
+    void activeUrl;
+    if (activeUrl === null || !hasVideo || decodedAsVideo || errored) return;
     const timer = setTimeout(failToPoster, DECODE_TIMEOUT_MS);
+    return () => {
+      clearTimeout(timer);
+    };
+  });
+
+  // Audio-only decode watchdog (§B): an undecodable audio file fires NO error
+  // (onError is a deliberate no-op for !hasVideo) and never loads - before the
+  // proxy ladder it was silent forever with zero feedback. If the element is
+  // still at readyState 0 (HAVE_NOTHING) after AUDIO_DECODE_TIMEOUT_MS, treat
+  // it as undecodable and kick the proxy. The readyState re-check AT FIRE TIME
+  // is the disarm: playable audio reaches ≥1 within the budget (latching
+  // decodedAsAudio via loadedmetadata on the way), so the spurious-error
+  // protection for playable audio cannot regress. A slow-loading but playable
+  // file that trips this merely triggers a harmless remux - the proxy swap
+  // re-classifies and plays (documented trade-off).
+  $effect(() => {
+    void activeUrl;
+    if (activeUrl === null || hasVideo || audioFailed) return;
+    const timer = setTimeout(() => {
+      if (videoEl !== null && videoEl.readyState === 0) {
+        audioFailed = true;
+        kickProxy(false);
+      }
+    }, AUDIO_DECODE_TIMEOUT_MS);
     return () => {
       clearTimeout(timer);
     };
@@ -121,19 +257,29 @@
   function onLoadedMetadata(): void {
     if (errored) return;
     // codec !== '' AND a real frame (videoWidth>0) ⇒ video; else audio-only.
+    //
+    // The latch MUST happen HERE, not at `loadeddata`. Measured in the real
+    // build: under preload="metadata" WKWebView stops at readyState 1 and a
+    // perfectly healthy h264 mp4 emits only progress → suspend →
+    // loadedmetadata(rs 1, videoWidth 640) - `loadeddata` NEVER fires. Latching
+    // at `loadeddata` therefore left EVERY video unlatched until the 4 s decode
+    // timeout demoted it to poster, i.e. no live preview anywhere. (It also
+    // could not have distinguished the hung mpegts case it was meant to catch,
+    // since that event is absent for good and bad files alike.)
     if (isRealVideoFrame()) decodedAsVideo = true;
     else decodedAsAudio = true;
   }
 
   function onLoadedData(): void {
     if (errored) return;
-    // Recovery for WebKit codecs that report videoWidth 0 at `loadedmetadata`
-    // (above → provisional audio-only, rendered invisible) and only populate the
-    // intrinsic size a tick later. By `loadeddata` the first frame has decoded so
-    // videoWidth is reliable; promoting here flips a misclassified real video back
-    // to video mode. derivePreviewMode prioritises `decoded` over `audioDecoded`,
-    // so this wins even when decodedAsAudio was already latched. A true audio-only
-    // file keeps videoWidth 0 here, so the guard leaves it in audio mode.
+    // Recovery for the paths that DO reach readyState ≥ 2 (see the note above:
+    // preload="metadata" usually stops before this event). It re-promotes the
+    // WebKit codecs that report videoWidth 0 at `loadedmetadata` (above →
+    // provisional audio-only, rendered invisible) and only populate the
+    // intrinsic size once the first frame lands. derivePreviewMode prioritises
+    // `decoded` over `audioDecoded`, so this wins even when decodedAsAudio was
+    // already latched. A true audio-only file keeps videoWidth 0 here, so the
+    // guard leaves it in audio mode.
     if (isRealVideoFrame()) decodedAsVideo = true;
   }
 
@@ -231,13 +377,13 @@
     <div class="preview-grid"></div>
   </div>
 
-  {#if url !== null && (previewMode === 'video' || previewMode === 'audio')}
+  {#if activeUrl !== null && (previewMode === 'video' || previewMode === 'audio')}
     <!-- svelte-ignore a11y_media_has_caption -->
     <video
       bind:this={videoEl}
       class="preview-video"
       class:audio-only={previewMode === 'audio'}
-      src={url}
+      src={activeUrl}
       playsinline
       preload="metadata"
       aria-label={pathStem(path)}
@@ -255,9 +401,17 @@
     {formatTimecodePrecise(wizardState.playhead)} / {formatTimecodePrecise(duration)}
   </div>
 
-  {#if previewMode === 'poster' || previewMode === 'art'}
+  {#if previewNote !== null}
     <p class="preview-note">
-      {previewMode === 'poster' ? t('preview.note.poster') : t('preview.note.unavailable')}
+      {#if previewNote === 'preparing'}
+        {t('preview.note.preparing')}{#if proxyFraction !== null}{' '}{Math.round(
+            proxyFraction * 100
+          )}%{/if}
+      {:else if previewNote === 'poster'}
+        {t('preview.note.poster')}
+      {:else}
+        {t('preview.note.unavailable')}
+      {/if}
     </p>
   {/if}
 

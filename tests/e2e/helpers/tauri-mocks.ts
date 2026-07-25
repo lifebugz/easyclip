@@ -60,6 +60,20 @@ export interface TauriMockOptions {
   /** Stay pending until cancel_processing, then reject OperationCancelled. */
   processHoldUntilCancel?: boolean;
   /**
+   * Preview-proxy build result (build_preview_proxy). When unset, every build
+   * call REJECTS (AppError-shaped processingFailed) - the safe default: specs
+   * that exercise poster fallback keep their poster note (the ladder exhausts
+   * within ~2 mock ticks) instead of a surprise src-swap mid-assertion.
+   */
+  proxyResult?: { proxyPath: string; method: 'remux' | 'transcode' };
+  /** Explicit AppError-shaped rejection for build_preview_proxy (documentation
+   *  of intent; behaviorally the same as the unset default). */
+  proxyReject?: ProbeMockReject;
+  /** Scripted progress events streamed (~15ms apart) before settlement. */
+  proxyScript?: { fraction: number | null }[];
+  /** Delay build settlement by N ms so specs can observe the building note. */
+  proxyDelayMs?: number;
+  /**
    * Override the base URL that convertFileSrc uses. Defaults to the Tauri
    * `asset://localhost` scheme. Set to an HTTP origin+prefix (e.g.
    * `'http://localhost:5173/asset-stub'`) so Playwright e2e specs that need the
@@ -96,6 +110,10 @@ export async function installTauriMocks(page: Page, options: TauriMockOptions = 
     processResult: options.processResult ?? null,
     processReject: options.processReject ?? null,
     processHoldUntilCancel: options.processHoldUntilCancel ?? false,
+    proxyResult: options.proxyResult ?? null,
+    proxyReject: options.proxyReject ?? null,
+    proxyScript: options.proxyScript ?? [],
+    proxyDelayMs: options.proxyDelayMs ?? 0,
     convertFileSrcBase: options.convertFileSrcBase ?? null,
     // Single source of truth for the snap threshold — keeps the plan_duration
     // mock below from drifting from the Rust engine's MIN_CUT_DUR.
@@ -233,6 +251,32 @@ export async function installTauriMocks(page: Page, options: TauriMockOptions = 
           w.__posterCalls.push({ ...args });
           // A 1x1 canned JPEG (base64, no data: prefix — the wrapper adds it).
           return '/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////2wBDAf//////////////////////////////////////////////////////////////////////////////////////wAARCAABAAEDAREAAhEBAxEB/8QAFAABAAAAAAAAAAAAAAAAAAAAAv/EABQQAQAAAAAAAAAAAAAAAAAAAAD/xAAUAQEAAAAAAAAAAAAAAAAAAAAA/8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAwDAQACEQMRAD8AvwAH/9k=';
+        }
+        // Preview proxy: invoke('build_preview_proxy', { path, forceTranscode, onEvent }).
+        if (cmd === 'build_preview_proxy') {
+          const w = window as unknown as { __proxyCalls?: unknown[] };
+          w.__proxyCalls = w.__proxyCalls ?? [];
+          w.__proxyCalls.push({ ...args, onEvent: undefined });
+          const channel = (args as { onEvent?: { onmessage?: (e: unknown) => void } } | undefined)
+            ?.onEvent;
+          for (const [i, ev] of d.proxyScript.entries()) {
+            setTimeout(() => channel?.onmessage?.(ev), 15 * (i + 1));
+          }
+          const settleAfter = Math.max(d.proxyDelayMs, 15 * (d.proxyScript.length + 1));
+          await new Promise<void>((r) => setTimeout(r, settleAfter));
+          if (d.proxyResult !== null) return d.proxyResult;
+          const rej = d.proxyReject ?? {
+            kind: 'processingFailed',
+            i18nKey: 'error.processingFailed',
+            details: 'mock: no proxyResult configured'
+          };
+          return Promise.reject(Object.assign(new Error(rej.i18nKey), rej));
+        }
+        // Preview proxy cancel: invoke('cancel_preview_proxy').
+        if (cmd === 'cancel_preview_proxy') {
+          const w = window as unknown as { __proxyCancelCalls?: number };
+          w.__proxyCancelCalls = (w.__proxyCancelCalls ?? 0) + 1;
+          return null;
         }
         // Phase 9 cancel: invoke('cancel_processing').
         if (cmd === 'cancel_processing') {

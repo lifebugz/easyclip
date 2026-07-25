@@ -1,4 +1,5 @@
-import { convertFileSrc, invoke } from '@tauri-apps/api/core';
+import { Channel, convertFileSrc, invoke } from '@tauri-apps/api/core';
+import type { ProxyProgressEvent, ProxyResult } from '$lib/types';
 
 /**
  * Resolve a dialog-picked file path to a webview-loadable asset URL, or `null`
@@ -29,4 +30,26 @@ export function assetUrl(path: string): string | null {
 export async function posterFrame(path: string, timeSeconds: number): Promise<string> {
   const b64 = await invoke<string>('extract_poster_frame', { path, timeSeconds });
   return `data:image/jpeg;base64,${b64}`;
+}
+
+/**
+ * Build (or fetch from cache) a WebKit-playable preview proxy for a file the
+ * webview failed to decode at runtime. Progress streams through the Channel
+ * (ordered, same contract as processMedia); resolves with the proxy's path to
+ * hand to assetUrl, rejects with the AppError-shaped payload. Preview-only:
+ * trim/export always run against the ORIGINAL file.
+ */
+export async function buildPreviewProxy(
+  path: string,
+  forceTranscode: boolean,
+  onProgress: (e: ProxyProgressEvent) => void
+): Promise<ProxyResult> {
+  const channel = new Channel<ProxyProgressEvent>();
+  channel.onmessage = onProgress;
+  return invoke<ProxyResult>('build_preview_proxy', { path, forceTranscode, onEvent: channel });
+}
+
+/** Idempotent: cancels a live proxy build (no-op when none is running). */
+export async function cancelPreviewProxy(): Promise<void> {
+  return invoke('cancel_preview_proxy');
 }
