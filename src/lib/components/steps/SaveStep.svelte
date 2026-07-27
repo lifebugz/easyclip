@@ -119,7 +119,9 @@
           class="flex items-center rounded bg-gray-100 px-3 py-2 text-sm font-mono text-gray-700"
           aria-hidden="true"
           data-pill="ext"
-          >{'.'}{wizardState.mediaInfo === null ? '' : wizardState.mediaInfo.ext}</span
+          >{/* i18n-exempt */ '.'}{wizardState.mediaInfo === null
+            ? ''
+            : wizardState.mediaInfo.ext}</span
         >
       </div>
       {#if nameError !== null}

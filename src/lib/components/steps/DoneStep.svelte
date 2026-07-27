@@ -56,7 +56,7 @@
       <div class="rounded border px-4 py-3">
         <span class="block text-sm text-gray-500">{t('done.removed')}</span>
         <span class="text-lg font-semibold tabular-nums" dir="ltr" data-testid="done-removed"
-          >{'−'}{formatDuration(result.removedDuration)}</span
+          >{/* i18n-exempt */ '−'}{formatDuration(result.removedDuration)}</span
         >
       </div>
     </div>

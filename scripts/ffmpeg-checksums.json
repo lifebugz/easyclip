@@ -1,34 +1,34 @@
 {
   "ffmpegVersion": "8.1",
-  "license": "LGPL",
+  "license": "mixed (Windows: LGPL-2.1-or-later; macOS/Linux: GPL-3.0-or-later)",
   "targets": {
     "aarch64-apple-darwin": {
       "archive": "zip",
       "binaries": {
         "ffmpeg": {
-          "url": "https://ffmpeg.martin-riedl.de/redirect/latest/macos/arm64/release/ffmpeg.zip",
-          "sha256": "a05b1a47bb3ac89a95a55eec713f8bbb347051bb07015f3b7d08fb62ed81a21e",
+          "url": "https://github.com/lifebugz/easyclip/releases/download/ffmpeg-sidecars-2026-07-04/ffmpeg-macos-arm64.zip",
+          "sha256": "ef1aa60006c7b77ce170c1608c08d8e4ba1c30c5746f2ac986ded932d0ac2c3c",
           "pathInArchive": "ffmpeg"
         },
         "ffprobe": {
-          "url": "https://ffmpeg.martin-riedl.de/redirect/latest/macos/arm64/release/ffprobe.zip",
-          "sha256": "135e70d2518beeb568183952dbc4bdeca1628dd49a7376d57e6b27dbc57d209f",
+          "url": "https://github.com/lifebugz/easyclip/releases/download/ffmpeg-sidecars-2026-07-04/ffprobe-macos-arm64.zip",
+          "sha256": "c39787f4af7a3932502d2d48db6f6feaaa836b48a73ef78c32cc3285df61dfaf",
           "pathInArchive": "ffprobe"
         }
       },
-      "source": "ffmpeg.martin-riedl.de"
+      "source": "github.com/lifebugz/easyclip releases (pinned mirror of ffmpeg.martin-riedl.de GPL build)"
     },
     "x86_64-apple-darwin": {
       "archive": "zip",
       "binaries": {
         "ffmpeg": {
           "url": "https://ffmpeg.martin-riedl.de/redirect/latest/macos/amd64/release/ffmpeg.zip",
-          "sha256": "8cb711bfa6f66033112d708dc275220419d0fdb49c5b752f8db25f11a92d321f",
+          "sha256": "a52ef43883f44c219766d4b3bdde4e635b35465d0b704c01c3a0566b59775df9",
           "pathInArchive": "ffmpeg"
         },
         "ffprobe": {
           "url": "https://ffmpeg.martin-riedl.de/redirect/latest/macos/amd64/release/ffprobe.zip",
-          "sha256": "e9b9b83fef584c367b27c683a1172921b4f48fa8bd5df6712ef54e63b915ea50",
+          "sha256": "5408ca588c8c72b0dde3afe676d0a7acf25ef97e55ae6eba5c7bede1cda42695",
           "pathInArchive": "ffprobe"
         }
       },
@@ -38,49 +38,49 @@
       "archive": "zip",
       "binaries": {
         "ffmpeg": {
-          "url": "https://ffmpeg.martin-riedl.de/redirect/latest/linux/amd64/release/ffmpeg.zip",
-          "sha256": "50b9360d9f0de1555bb4dd354c708427027562624d553e93bb26060059bef16a",
+          "url": "https://github.com/lifebugz/easyclip/releases/download/ffmpeg-sidecars-2026-07-04/ffmpeg-linux-amd64.zip",
+          "sha256": "56452c0bfc4ee0325cd615d62f46ba8264f62eed34f727c2224c6c84fa7b8719",
           "pathInArchive": "ffmpeg"
         },
         "ffprobe": {
-          "url": "https://ffmpeg.martin-riedl.de/redirect/latest/linux/amd64/release/ffprobe.zip",
-          "sha256": "35595494d31fb0d15948199bc7242265929a6dcdb74d7a097bd3f373f840dbeb",
+          "url": "https://github.com/lifebugz/easyclip/releases/download/ffmpeg-sidecars-2026-07-04/ffprobe-linux-amd64.zip",
+          "sha256": "c6f2d36e98f9a4445fad0b0be539f4c4faf13fd502116bf131becd53f56cd390",
           "pathInArchive": "ffprobe"
         }
       },
-      "source": "ffmpeg.martin-riedl.de"
+      "source": "github.com/lifebugz/easyclip releases (pinned mirror of ffmpeg.martin-riedl.de GPL build)"
     },
     "x86_64-pc-windows-msvc": {
       "archive": "zip",
       "binaries": {
         "ffmpeg": {
-          "url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-06-23-13-52/ffmpeg-n8.1.2-win64-lgpl-8.1.zip",
-          "sha256": "ce8f1e2ee01ca329046a8b717f534c4a99e0970fee59a36e03e4dc42509d4a07",
-          "pathInArchive": "ffmpeg-n8.1.2-win64-lgpl-8.1/bin/ffmpeg.exe"
+          "url": "https://github.com/lifebugz/easyclip/releases/download/ffmpeg-sidecars-8.1/ffmpeg-n8.1-latest-win64-lgpl-8.1.zip",
+          "sha256": "57f808c57682570e755fcf107482b97ea213452e18db6c762978cd9c5e5cb771",
+          "pathInArchive": "ffmpeg-n8.1-latest-win64-lgpl-8.1/bin/ffmpeg.exe"
         },
         "ffprobe": {
-          "url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-06-23-13-52/ffmpeg-n8.1.2-win64-lgpl-8.1.zip",
-          "sha256": "ce8f1e2ee01ca329046a8b717f534c4a99e0970fee59a36e03e4dc42509d4a07",
-          "pathInArchive": "ffmpeg-n8.1.2-win64-lgpl-8.1/bin/ffprobe.exe"
+          "url": "https://github.com/lifebugz/easyclip/releases/download/ffmpeg-sidecars-8.1/ffmpeg-n8.1-latest-win64-lgpl-8.1.zip",
+          "sha256": "57f808c57682570e755fcf107482b97ea213452e18db6c762978cd9c5e5cb771",
+          "pathInArchive": "ffmpeg-n8.1-latest-win64-lgpl-8.1/bin/ffprobe.exe"
         }
       },
-      "source": "github.com/BtbN/FFmpeg-Builds"
+      "source": "github.com/lifebugz/easyclip releases (pinned mirror of BtbN LGPL build)"
     },
     "aarch64-pc-windows-msvc": {
       "archive": "zip",
       "binaries": {
         "ffmpeg": {
-          "url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-06-23-13-52/ffmpeg-n8.1.2-winarm64-lgpl-8.1.zip",
-          "sha256": "68ecf8edad1b65406890391a8ef6d5223d785fad6a28a86beb19abeb4834527e",
-          "pathInArchive": "ffmpeg-n8.1.2-winarm64-lgpl-8.1/bin/ffmpeg.exe"
+          "url": "https://github.com/lifebugz/easyclip/releases/download/ffmpeg-sidecars-8.1/ffmpeg-n8.1-latest-winarm64-lgpl-8.1.zip",
+          "sha256": "d689ddd5bd9727d14c4548442bc79e24288a7fdf309512ec1348c7b7e2b33d2e",
+          "pathInArchive": "ffmpeg-n8.1-latest-winarm64-lgpl-8.1/bin/ffmpeg.exe"
         },
         "ffprobe": {
-          "url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-06-23-13-52/ffmpeg-n8.1.2-winarm64-lgpl-8.1.zip",
-          "sha256": "68ecf8edad1b65406890391a8ef6d5223d785fad6a28a86beb19abeb4834527e",
-          "pathInArchive": "ffmpeg-n8.1.2-winarm64-lgpl-8.1/bin/ffprobe.exe"
+          "url": "https://github.com/lifebugz/easyclip/releases/download/ffmpeg-sidecars-8.1/ffmpeg-n8.1-latest-winarm64-lgpl-8.1.zip",
+          "sha256": "d689ddd5bd9727d14c4548442bc79e24288a7fdf309512ec1348c7b7e2b33d2e",
+          "pathInArchive": "ffmpeg-n8.1-latest-winarm64-lgpl-8.1/bin/ffprobe.exe"
         }
       },
-      "source": "github.com/BtbN/FFmpeg-Builds"
+      "source": "github.com/lifebugz/easyclip releases (pinned mirror of BtbN LGPL build)"
     }
   }
 }

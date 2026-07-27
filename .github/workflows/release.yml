@@ -1,94 +1,269 @@
-name: Release (Windows)
-
-# Build a Windows installer (.exe) and attach it to a DRAFT GitHub Release.
-#
-# HOW TO USE: GitHub -> Actions -> "Release (Windows)" -> Run workflow. When it
-# finishes, a DRAFT release appears under Releases with the installer attached;
-# review/test it, then click "Publish release" (or just download the .exe from
-# the draft). The draft means nothing goes public until you say so.
-#
-# Produces ONLY the NSIS per-user installer (EasyClip_<version>_x64-setup.exe),
-# which is friendlier for non-technical users than the per-machine .msi (no admin
-# elevation). To also build the .msi, remove the `--bundles nsis` arg below.
-#
-# IMPORTANT: the installer is UNSIGNED. On first run Windows SmartScreen shows
-# "Windows protected your PC" — the user must click "More info" then "Run anyway".
-# Removing that prompt needs a paid Authenticode code-signing certificate.
-#
-# To also cut a release automatically on a version tag, add:
-#   push:
-#     tags: ['v*']
-# (and drop the explicit `tagName` below so tauri-action uses the pushed tag).
-
+name: Release
 on:
-  workflow_dispatch:
+  push:
+    branches: [main]
 
-permissions:
-  contents: write # tauri-action needs this to create the Release
-
-env:
-  CARGO_TERM_COLOR: always
-  # Job-level so EVERY step inherits it — both the explicit sidecar fetch below
-  # AND tauri-action's `tauri build` (whose beforeBuildCommand re-runs
-  # setup:ffmpeg). It skips detectTargetTriple()'s `rustc -vV` parse, which the
-  # windows-latest image stopped emitting parseably (same fix as ci.yml).
-  EASYCLIP_TARGET_TRIPLE: x86_64-pc-windows-msvc
+permissions: {} # granted per-job below
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false # never cancel an in-flight release
 
 jobs:
-  build-windows:
-    name: Build Windows installer (NSIS .exe)
-    runs-on: windows-latest
+  release-please:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write # create release + tag
+      pull-requests: write # open/maintain the release PR
+    outputs:
+      release_created: ${{ steps.rp.outputs.release_created }}
+      tag_name: ${{ steps.rp.outputs.tag_name }}
+      release_id: ${{ steps.rp.outputs.id }} # numeric GitHub Release id (root-path: top-level, NOT dot-prefixed)
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Bun
-        uses: oven-sh/setup-bun@v2
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        id: rp
         with:
-          bun-version: latest
+          token: ${{ secrets.GITHUB_TOKEN }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
 
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache cargo
-        uses: Swatinem/rust-cache@v2
+  build:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    permissions:
+      contents: write # upload assets
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14 # Apple Silicon only (D4: Intel dropped)
+            triple: aarch64-apple-darwin
+            args: --target aarch64-apple-darwin --bundles app,dmg
+          - os: ubuntu-24.04
+            triple: x86_64-unknown-linux-gnu
+            args: --bundles deb,appimage
+          - os: windows-latest
+            triple: x86_64-pc-windows-msvc
+            args: ''
+    runs-on: ${{ matrix.os }}
+    env:
+      CI: true # GH runners set this already; explicit belt-and-suspenders for the macOS DMG/AppleScript hang (H1)
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0 - match ci.yml
+      - uses: ./.github/actions/setup-easyclip
         with:
-          workspaces: ./src-tauri -> target
+          rust-targets: ${{ matrix.triple }}
+          rust-components: '' # release build needs no clippy/rustfmt
 
-      - name: Install JS deps
-        run: bun install --frozen-lockfile
-
-      # The root tsconfig extends the gitignored .svelte-kit/tsconfig.json; sync
-      # generates it so the Svelte build resolves types (mirrors ci.yml).
-      - name: Sync SvelteKit
-        run: bunx svelte-kit sync
-
-      # Populate src-tauri/binaries/ with the Windows ffmpeg/ffprobe sidecars
-      # BEFORE the build. `shell: bash` so the extractor's spawnSync('unzip')
-      # finds git-bash's unzip (the default Windows shell is pwsh, which lacks
-      # it). setup:ffmpeg is idempotent — it skips when the sidecar is already in
-      # place — so the build's beforeBuildCommand re-run is a no-op needing no unzip.
-      - name: Fetch FFmpeg sidecar
+      # M3: fail loudly if the release tag and the bundled version disagree. bun is on
+      # PATH (installed by the composite); `bun -e` resolves require() relative to cwd.
+      - name: Assert bundle version matches release tag
         shell: bash
-        run: bun run setup:ffmpeg
+        env:
+          TAG: ${{ needs.release-please.outputs.tag_name }}
+        run: |
+          EXPECTED="${TAG#v}"
+          ACTUAL="$(bun -e "console.log(require('./src-tauri/tauri.conf.json').version)")"
+          if [ "$EXPECTED" != "$ACTUAL" ]; then
+            echo "::error::release tag $TAG implies version $EXPECTED but tauri.conf.json is $ACTUAL"
+            exit 1
+          fi
+          echo "✓ tag $TAG matches bundle version $ACTUAL"
 
-      # Runs `bunx tauri build --bundles nsis` (beforeBuildCommand: setup:ffmpeg
-      # [no-op, sidecars present] + vite build), then uploads the NSIS installer
-      # to a DRAFT release. `tauriScript: bunx tauri` makes tauri-action use Bun
-      # to invoke the local @tauri-apps/cli rather than guessing the runner.
-      - name: Build + draft release
-        uses: tauri-apps/tauri-action@v0
+      - uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # v1.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tauriScript: bunx tauri
-          args: --bundles nsis
-          tagName: easyclip-v__VERSION__ # __VERSION__ is read from tauri.conf.json
-          releaseName: 'EasyClip v__VERSION__ (Windows)'
-          releaseBody: |
-            Unsigned Windows installer (NSIS, per-user — no admin needed).
+          releaseId: ${{ needs.release-please.outputs.release_id }} # upload into the existing draft
+          args: ${{ matrix.args }}
 
-            On first run Windows SmartScreen may show "Windows protected your PC".
-            Click **More info** then **Run anyway**. This is expected for apps
-            without a paid code-signing certificate.
-          releaseDraft: true
-          prerelease: false
+      - name: Verify ad-hoc signature (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          APP="src-tauri/target/${{ matrix.triple }}/release/bundle/macos/EasyClip.app"
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          echo "✓ ad-hoc signature verified for $APP"
+
+  publish:
+    needs: [release-please, build]
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      # Flip the draft to public by release id (the v-tag ref doesn't resolve while the
+      # release is still a draft; the id we already carry is unambiguous).
+      - name: Publish the drafted release
+        run: gh api -X PATCH "repos/${{ github.repository }}/releases/${{ needs.release-please.outputs.release_id }}" -F draft=false
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Bump Casks/easyclip.rb (version + sha256) in lifebugz/homebrew-tap once the
+  # release is public. This lives HERE, in the same run, because `publish` flips
+  # the draft with the default GITHUB_TOKEN and GitHub suppresses workflow
+  # triggers for events created by that token - an `on: release` workflow would
+  # never fire, in this repo or the tap. The implicit success() gate on the
+  # `needs` edge also guarantees no path pushes a cask for an unpublished release.
+  homebrew:
+    needs: [release-please, publish]
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read # read own release-asset digests via GITHUB_TOKEN
+      issues: write # failure-notification step below
+    # Serialize ALL tap pushes across releases (not keyed by tag/ref). Largely
+    # overlaps the workflow-level release-<ref> group today (single ref); kept
+    # anyway: harmless, mirrors ccpz, and survives future trigger changes. NOT
+    # cross-repo protection against ccpz's tap pushes - only the recover loop
+    # below provides that.
+    concurrency:
+      group: easyclip-homebrew-tap-push
+      cancel-in-progress: false # an in-flight tap push always runs to completion
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0 - for scripts/render-brew-cask.sh
+      - name: Generate App token for the tap repo
+        id: tap-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          # The App's numeric ID is a valid `client-id` (the action forwards
+          # either form to octokit); secret names match ccpluginizer's so the
+          # values copy 1:1.
+          client-id: ${{ secrets.RELEASE_BOT_APP_ID }}
+          private-key: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
+          owner: lifebugz
+          repositories: homebrew-tap
+          # Down-scope the minted token to contents-only instead of inheriting
+          # every permission the App installation has.
+          permission-contents: write
+      - name: Check out the tap (keeps the token out of a hand-built URL / .git/config)
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          repository: lifebugz/homebrew-tap
+          token: ${{ steps.tap-token.outputs.token }}
+          path: tap
+      - name: Render + commit + push cask
+        # Two-token boundary: GH_TOKEN (default GITHUB_TOKEN) READS easyclip's
+        # release below; the App token lives ONLY in tap/.git's credentials and
+        # WRITES the tap. Never set the App token as GH_TOKEN - the App is not
+        # installed on easyclip, so `gh release view` would 404 and masquerade
+        # as a missing digest.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.release-please.outputs.tag_name }}
+        run: |
+          VERSION="${TAG#v}"
+          # Explicit failure branch, NOT `|| true`: an auth/rate-limit/network
+          # failure must read as what it is, not masquerade as "digest empty".
+          ASSETS="$(gh release view "$TAG" -R "$GITHUB_REPOSITORY" --json assets)" \
+            || { echo "::error::gh release view failed for $TAG"; exit 1; }
+          # Exact-name selector, pinned; substring matching on "aarch64" is
+          # banned - the release also carries EasyClip_<v>_aarch64.app.tar.gz,
+          # which sorts first. `jq -er` exits non-zero on any miss; the >1
+          # branch is belt-and-suspenders (GitHub enforces unique asset names).
+          # The API digest is computed at upload time (no async race) and was
+          # verified byte-equal to a locally computed sha256 for v0.2.0.
+          SHA_DMG="$(jq -er --arg v "$VERSION" \
+            '[.assets[] | select(.name=="EasyClip_\($v)_aarch64.dmg")]
+             | if length!=1 then error("want 1 dmg, got \(length)")
+               else .[0].digest | ltrimstr("sha256:") end' <<<"$ASSETS")" \
+            || { echo "::error::DMG digest missing for $TAG (release incomplete?)"; exit 1; }
+          # Single source of truth for the render invocation, shared by the main
+          # path and recover_onto_tip so the two can never drift. Every line
+          # guards with `|| return 1`: when called as `render_cask … || return 1`
+          # bash turns OFF `set -e` inside the function, so these explicit guards
+          # (not `set -e`) are what abort a failed render / broken Ruby instead
+          # of silently writing a bad cask. Direct redirect, never a captured
+          # variable (command substitution strips the trailing newline).
+          RENDER="$GITHUB_WORKSPACE/scripts/render-brew-cask.sh"
+          render_cask() {   # $1 = destination path, relative to cwd
+            bash "$RENDER" "$VERSION" "$SHA_DMG" > "$1" || return 1
+            ruby -c "$1" || return 1   # never push broken Ruby (ubuntu has ruby preinstalled)
+          }
+          mkdir -p tap/Casks
+          render_cask tap/Casks/easyclip.rb
+          cd tap
+          git config user.name  "ccpluginizer-release-bot[bot]"
+          git config user.email "283500925+ccpluginizer-release-bot[bot]@users.noreply.github.com"
+          git add Casks/easyclip.rb
+          git diff --cached --quiet && { echo "cask unchanged"; exit 0; }
+          git commit -m "easyclip ${VERSION}"
+          # The job-level concurrency group already serializes easyclip's tap
+          # pushes, so the first push normally fast-forwards. The loop is a
+          # secondary guard for the one case the group can't cover: an EXTERNAL
+          # writer (e.g. ccpz's publish-formula) advancing the tap's main between
+          # this checkout and the push. Recovery RE-RENDERS the cask onto the
+          # fetched tip (pure function of version+digest → full-file overwrite,
+          # never a three-way merge, which can't hit a content conflict the way
+          # `pull --rebase` would).
+          #
+          # Each recovery step is `|| return N` so a TRANSIENT error in
+          # fetch/reset/render (the very failures this loop exists to survive)
+          # returns a status the caller captures, instead of a bare non-zero exit
+          # killing the whole step under `set -e` before attempts 2-3 ever run.
+          # Return 2 = "tap already current"; other non-zero = retry.
+          recover_onto_tip() {
+            # Re-fetch even though push_published already fetched this iteration:
+            # our push was just REJECTED because the remote advanced past the tip
+            # it saw, so we must read the NEWER tip before resetting onto it.
+            git fetch origin main || return 1
+            # `--hard` (not `--soft`): land BOTH HEAD and the worktree on the
+            # live tip, then re-render. A `--soft` reset leaves the stale
+            # worktree behind, so any NON-cask file the external writer added to
+            # the tip would be staged for DELETION by the `git add` below - the
+            # recovery commit would silently revert that writer's change, and the
+            # no-op short-circuit would never fire even when the cask is
+            # byte-identical. `--hard` discards nothing we need: the very next
+            # line re-renders Casks/easyclip.rb from scratch.
+            git reset --hard origin/main || return 1
+            # A tip that tracks no file under Casks/ leaves no Casks/ dir after
+            # the hard reset, so render_cask's redirect would fail "No such file
+            # or directory" and burn every retry. Recreate it.
+            mkdir -p Casks || return 1
+            render_cask Casks/easyclip.rb || return 1
+            git add Casks/easyclip.rb || return 1
+            # Content check, not SHA check: this catches an external writer that
+            # already published IDENTICAL content under a different commit.
+            git diff --cached --quiet && { echo "cask already current on tap"; return 2; }
+            git commit -m "easyclip ${VERSION}" || return 1
+          }
+          # Only treat a push as a successful publish when HEAD is actually a
+          # NEW commit ahead of origin/main. If recovery aborts AFTER the hard
+          # reset but BEFORE `git commit`, HEAD equals the fetched tip; a bare
+          # `git push` then prints "Everything up-to-date" and exits 0, which a
+          # plain `&& exit 0` would misread as "published" - silently shipping a
+          # release with NO cask update. This guard refuses to declare success
+          # unless our commit is genuinely ahead of the live tip.
+          push_published() {
+            git fetch origin main || return 1
+            git merge-base --is-ancestor HEAD origin/main && return 1   # HEAD already on tip → nothing to publish
+            git push origin HEAD:main
+          }
+          for attempt in 1 2 3; do
+            push_published && exit 0
+            # `rc=0; recover_onto_tip || rc=$?` - capturing via `||` keeps a
+            # non-zero return from tripping `set -e` (a bare call would abort the
+            # step before `$?` is read). The attempt counter advances on EVERY
+            # path, recovery errors included, so 3 attempts cannot loop forever.
+            rc=0; recover_onto_tip || rc=$?
+            [ "$rc" -eq 2 ] && exit 0   # external writer already published this exact cask
+            [ "$rc" -eq 0 ] || echo "::warning::recovery attempt ${attempt} failed (rc=${rc}), retrying"
+          done
+          # Final attempt: the commit was re-rendered onto the latest tip by the
+          # 3rd recovery. push_published still refuses a no-op, so this can only
+          # exit 0 when a real cask commit reached the tap.
+          push_published && exit 0
+          echo "::error::could not push cask after 3 attempts"; exit 1
+      - name: File an issue on failure
+        # The red job sits on a release run nobody may be watching (release PRs
+        # are admin-bypass merged) while the stale cask is silent to brew users -
+        # an issue is a durable, visible signal. The release itself stays public:
+        # stale cask > broken cask.
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.release-please.outputs.tag_name }}
+        run: |
+          RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          gh issue create -R "$GITHUB_REPOSITORY" \
+            --title "cask bump failed for ${TAG}" \
+            --body "$(printf 'The homebrew job failed while bumping Casks/easyclip.rb in lifebugz/homebrew-tap for %s.\n\nRun: %s\n\nThe release itself is public; only the cask bump failed (stale cask beats broken cask). Repair: re-run the failed job (its needs outputs persist), or hand-edit the tap (2-line change). Note a re-run replays the workflow YAML as of the original commit.' "$TAG" "$RUN_URL")"

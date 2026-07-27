@@ -36,6 +36,17 @@ export default defineConfig(
     }
   },
   {
+    // eslint-plugin-svelte v3's recommended config turns on `no-useless-mustaches`. Keep it ON -
+    // it's the only gate that catches a hardcoded translatable string wrapped in a mustache
+    // (e.g. `{'Save'}`), which scan-hardcoded-strings.ts skips (it ignores text starting with `{`).
+    // But allow deliberate non-translatable literals - bare punctuation/symbols like `.`/`!`/`−`/` `
+    // that stay wrapped so they don't read as hardcoded text - to opt out by including a
+    // `/* i18n-exempt */` comment in the mustache (see src/lib/components/steps/*).
+    rules: {
+      'svelte/no-useless-mustaches': ['error', { ignoreIncludesComment: true }]
+    }
+  },
+  {
     ignores: [
       'build/**',
       '.svelte-kit/**',

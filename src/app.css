@@ -8,8 +8,7 @@
   --color-brand-900: oklch(28% 0.18 250);
 }
 
-/* Phase 7 timeline-editor semantic tokens, ported from the design bundle
-   (docs/superpowers/design/easyclip-claude-design/project/styles/theme.css).
+/* Phase 7 timeline-editor semantic tokens, ported from the design bundle.
    Defined in :root, NOT @theme, on purpose: Tailwind v4 tree-shakes @theme
    tokens that no utility class references, and these are consumed only via var()
    inside component <style> blocks — so under @theme they'd be dropped and resolve

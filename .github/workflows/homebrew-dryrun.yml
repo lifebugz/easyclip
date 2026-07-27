@@ -1,0 +1,73 @@
+name: Homebrew dry-run
+
+# Manual smoke test of the tap-bump plumbing (mirrors ccpz's dry-run-formula):
+# mints the release-bot token, checks out the tap, renders Casks/easyclip.rb via
+# the shared script, validates it with `ruby -c`, and prints the diff vs the
+# tap's main - then stops. It NEVER commits or pushes (deliberately no push
+# input: that would dissolve this workflow's one hard guarantee). Purpose: prove
+# the two secrets + App installation + render plumbing work BEFORE the next real
+# release exercises the homebrew job in release.yml.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "easyclip tag to render. The default renders with a placeholder digest; pass a real vX.Y.Z to pull that release's real DMG digest. Must be vX.Y.Z - the render script rejects anything else after v-stripping."
+        required: false
+        default: 'v0.0.0'
+        type: string
+
+permissions: {} # granted per-job below
+
+jobs:
+  dry-run-cask:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read # read own release-asset digests via GITHUB_TOKEN
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0 - for scripts/render-brew-cask.sh
+      - name: Generate App token for the tap repo
+        id: tap-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ secrets.RELEASE_BOT_APP_ID }}
+          private-key: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
+          owner: lifebugz
+          repositories: homebrew-tap
+          permission-contents: write
+      - name: Check out the tap (proves the token can reach it; no push is invoked here)
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          repository: lifebugz/homebrew-tap
+          token: ${{ steps.tap-token.outputs.token }}
+          path: tap
+      - name: Render + validate the cask (NO commit, NO push)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          VERSION="${TAG#v}"
+          # Best-effort real digest: if the chosen tag's release carries the DMG,
+          # render with its digest; otherwise fall back to a 64-zero placeholder
+          # so the TEMPLATE still renders and passes `ruby -c`. This job
+          # validates token + tap checkout + render plumbing, NOT digest
+          # correctness, so a tag without a release (the default) must NOT fail
+          # it - hence tolerant `|| true` here, unlike the strict homebrew job.
+          # NOTE: the asset name + jq below mirror the homebrew job's digest read
+          # in release.yml - keep them in sync if that job's asset name or the
+          # render script's signature ever changes.
+          ASSETS="$(gh release view "$TAG" -R "$GITHUB_REPOSITORY" --json assets 2>/dev/null || true)"
+          PLACEHOLDER="0000000000000000000000000000000000000000000000000000000000000000"
+          SHA_DMG="$(jq -r --arg v "$VERSION" \
+            '.assets[] | select(.name=="EasyClip_\($v)_aarch64.dmg") | .digest | ltrimstr("sha256:")' \
+            <<<"$ASSETS" 2>/dev/null || true)"
+          SHA_DMG="${SHA_DMG:-$PLACEHOLDER}"
+          [ "$SHA_DMG" = "$PLACEHOLDER" ] && echo "::notice::no DMG digest for ${TAG} - rendering with a placeholder (plumbing test only)"
+          mkdir -p tap/Casks
+          bash scripts/render-brew-cask.sh "$VERSION" "$SHA_DMG" > tap/Casks/easyclip.rb
+          ruby -c tap/Casks/easyclip.rb # validate the rendered Ruby (ubuntu has ruby preinstalled)
+          echo "::notice::dry-run OK - token minted, tap checked out, cask rendered and ruby -c clean. Diff vs tap main:"
+          # `cd` on its own line: a failed cd must FAIL the job, not be masked -
+          # proving the tap checkout works is the point of this smoke test.
+          # `git diff` (no --exit-code) returns 0 even when the cask differs.
+          cd tap
+          git --no-pager diff -- Casks/easyclip.rb
