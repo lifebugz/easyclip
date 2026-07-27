@@ -201,6 +201,14 @@ mod tests {
             (false, "", true, "aac", Remux),
             (false, "", true, "mp3", Remux),
             (false, "", true, "alac", Remux),
+            // Degenerate: a file ffprobe reports with NEITHER stream (corrupt,
+            // or subtitle/data-only). Both clauses are vacuously true, so this
+            // lands on Remux. Harmless and deliberately left as-is: the argv
+            // maps `0:a:0`, ffmpeg exits non-zero ("matches no streams"), the
+            // ladder retries as transcode, that fails too, and the UI settles on
+            // art + "unavailable" - the correct end state. Transcode-instead
+            // would cost the same two doomed spawns, so there is nothing to win.
+            (false, "", false, "", Remux),
             (false, "", true, "vorbis", Transcode),
             (false, "", true, "opus", Transcode),
             (false, "", true, "", Transcode),
