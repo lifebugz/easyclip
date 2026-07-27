@@ -434,7 +434,9 @@
   {#if previewNote !== null}
     <p class="preview-note">
       {#if previewNote === 'preparing'}
-        {t('preview.note.preparing')}{#if proxyFraction !== null}{' '}{Math.round(
+        <!-- &nbsp; not {' '}: a string-literal mustache trips svelte/no-useless-mustaches,
+             and a non-breaking space also keeps the percentage on the label's line. -->
+        {t('preview.note.preparing')}{#if proxyFraction !== null}&nbsp;{Math.round(
             proxyFraction * 100
           )}%{/if}
       {:else if previewNote === 'poster'}
