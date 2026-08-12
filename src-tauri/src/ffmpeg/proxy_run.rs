@@ -192,6 +192,7 @@ pub async fn run_proxy(
             &part_path,
             fields.has_real_video,
             &fields.codec,
+            &fields.audio_codec,
         ),
         ProxyMethod::Transcode => {
             build_transcode_args(&source_path, &part_path, fields.has_real_video)
