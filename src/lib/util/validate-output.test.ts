@@ -33,12 +33,35 @@ test('validateSaveName: shell punctuation is accepted (argv spawn, not a shell)'
   }
 });
 
-test('validateSaveName: Windows-illegal filename chars are rejected (< > : " | ? *)', () => {
-  // These are shell-safe (argv spawn) but illegal in a Windows filename, so a
-  // name carrying one would fail the final rename with an opaque OS error.
-  // Mirrors validation.rs::validate_no_windows_illegal_name_chars.
+test('validateSaveName: Windows-illegal filename chars are rejected ON WINDOWS (< > : " | ? *)', () => {
   for (const bad of ['a|b', 'a?b', 'a*b', 'a<b', 'a>b', 'a"b', 'a:b']) {
-    expect(validateSaveName(bad)).toBe('save.error.invalid_chars');
+    expect(validateSaveName(bad, true)).toBe('save.error.invalid_chars');
+  }
+});
+
+test('validateSaveName: those same chars are ACCEPTED off Windows (legal POSIX names)', () => {
+  // All seven were verified creatable on APFS. Rejecting them portably was a
+  // regression: main accepted `< > : " ? *`, and the sidecar spawns via argv so
+  // none of them is shell-unsafe.
+  for (const ok of ['a|b', 'a?b', 'a*b', 'a<b', 'a>b', 'a"b', 'a:b']) {
+    expect(validateSaveName(ok, false)).toBeNull();
+  }
+});
+
+test('validateSaveName: the SaveStep prefill is never self-rejecting off Windows', () => {
+  // SaveStep seeds `${pathStem(path)}-trimmed` unsanitised, so a source named
+  // "Trip: Day 1.mp4" produced a prefill the validator rejected - blocking
+  // Start processing on a name the user never typed.
+  expect(validateSaveName('Trip: Day 1-trimmed', false)).toBeNull();
+  expect(validateSaveName('Best of 2024?-trimmed', false)).toBeNull();
+});
+
+test('validateSaveName: platform-independent rejections still apply on both', () => {
+  for (const isWindows of [true, false]) {
+    expect(validateSaveName('foo/bar', isWindows)).toBe('save.error.invalid_chars');
+    expect(validateSaveName('foo\\bar', isWindows)).toBe('save.error.invalid_chars');
+    expect(validateSaveName('a\0b', isWindows)).toBe('save.error.invalid_chars');
+    expect(validateSaveName('CON.mp4', isWindows)).toBe('save.error.invalid_chars');
   }
 });
 

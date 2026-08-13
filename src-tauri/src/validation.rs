@@ -44,16 +44,19 @@ pub fn validate_output_path(output: &str, input: &str) -> Result<PathBuf, AppErr
         path: output.to_string(),
     })?;
     let p = PathBuf::from(output);
-    // Reject Windows-illegal characters in the LEAF filename only (not the whole
-    // path: a directory legitimately contains `:` for a Windows drive letter and
-    // `\` / `/` as separators). `< > : " | ? *` are invalid in NTFS filenames on
-    // every Windows version, so a name carrying one passes shell-safe argv but
-    // fails the final rename with an opaque OS error — surface it pre-flight as the
-    // friendly OutputPathInvalid instead, mirroring the frontend validateSaveName.
-    if let Some(leaf) = p.file_name().and_then(|os| os.to_str()) {
-        validate_no_windows_illegal_name_chars(leaf).map_err(|_| AppError::OutputPathInvalid {
-            path: output.to_string(),
-        })?;
+    // Host-gated, not portable: `< > : " | ? *` are unwritable as an NTFS filename
+    // but perfectly legal on APFS/ext4, and SaveStep prefills the name from the
+    // source stem - so rejecting them everywhere blocked export on a name the app
+    // generated itself. Leaf only: a directory legitimately carries `:` (drive
+    // letter) and `\` / `/` (separators).
+    if cfg!(windows) {
+        if let Some(leaf) = p.file_name().and_then(|os| os.to_str()) {
+            validate_no_windows_illegal_name_chars(leaf).map_err(|_| {
+                AppError::OutputPathInvalid {
+                    path: output.to_string(),
+                }
+            })?;
+        }
     }
     let parent = p.parent().ok_or_else(|| AppError::OutputPathInvalid {
         path: output.to_string(),
@@ -280,25 +283,28 @@ mod tests {
     }
 
     #[test]
-    fn validate_output_path_rejects_windows_illegal_name_chars() {
-        // `< > : " | ? *` are illegal in Windows (NTFS) filenames. They are
-        // shell-safe (argv spawn) but cannot be written as a filename, so the
-        // validator must reject them pre-flight rather than let the final rename
-        // fail with an opaque OS error. Mirrors validate-output.ts::validateSaveName.
+    fn validate_output_path_gates_windows_illegal_name_chars_on_windows() {
+        // `< > : " | ? *` cannot be written as an NTFS filename, but all seven are
+        // legal on APFS/ext4 (verified). Rejecting them everywhere blocked names
+        // the app itself prefills from the source stem, so the check is host-gated.
         let d = TempDir::new().unwrap();
         let input = make_input(&d, "source.mp4");
         for name in [
             "a|b.mp4", "a?b.mp4", "a*b.mp4", "a<b.mp4", "a>b.mp4", "a\"b.mp4", "a:b.mp4",
         ] {
             let p = d.path().join(name);
-            assert!(
-                matches!(
-                    validate_output_path(p.to_str().unwrap(), &input),
-                    Err(AppError::OutputPathInvalid { .. })
-                ),
-                "expected rejection for Windows-illegal name {:?}",
-                name
-            );
+            let r = validate_output_path(p.to_str().unwrap(), &input);
+            if cfg!(windows) {
+                assert!(
+                    matches!(r, Err(AppError::OutputPathInvalid { .. })),
+                    "expected rejection on Windows for {name:?}, got {r:?}"
+                );
+            } else {
+                assert!(
+                    r.is_ok(),
+                    "expected acceptance off Windows for {name:?}, got {r:?}"
+                );
+            }
         }
     }
 

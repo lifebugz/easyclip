@@ -9,9 +9,12 @@
 // frontend's job is to give the user immediate inline feedback before they
 // click Start processing.
 //
-// Pure — no module-scope state, no side effects. Bun-testable.
+// Pure given its arguments. `validateSaveName`'s host default reads pathSep()'s
+// module cache; pass `isWindows` explicitly to keep a call fully deterministic
+// (the Bun tests do).
 
 import type { TranslationKey } from '$lib/i18n/index.svelte';
+import { pathSep } from './path';
 
 // Control characters, mirroring validation.rs::validate_no_control_chars. The
 // FFmpeg sidecar is spawned via argv (not a shell), so shell metacharacters like
@@ -26,13 +29,11 @@ const CONTROL_CHARS = ['\0', '\n', '\r'];
 // Rust validator complains.
 const PATH_SEPARATORS_IN_NAME = ['/', '\\'];
 
-// Characters illegal in a Windows (NTFS) FILENAME. Unlike shell metacharacters
-// (& $ ; `, now accepted because the sidecar spawns via argv), these cannot
-// appear in a filename on Windows at all, so a name carrying one passes the
-// argv-safe check yet fails the final file write/rename with an opaque OS error.
-// Reject portably (all hosts) and inline, mirroring
-// validation.rs::validate_no_windows_illegal_name_chars. Path separators are
-// covered separately above.
+// Characters illegal in a Windows (NTFS) FILENAME. Applied on Windows hosts
+// ONLY: all seven are legal on APFS/ext4, and SaveStep prefills the name from
+// the source stem, so rejecting them portably blocked export on a name the app
+// generated itself. Mirrors validation.rs, which gates the same list on
+// cfg!(windows). Path separators are covered separately above.
 const WINDOWS_ILLEGAL_NAME_CHARS = ['<', '>', ':', '"', '|', '?', '*'];
 
 // Windows reserved device names from validation.rs::validate_not_reserved_windows_name.
@@ -85,16 +86,22 @@ function stem(name: string): string {
  * otherwise the i18n key of the relevant `save.error.*` message.
  *
  * Mirrors src-tauri/src/validation.rs::validate_output_path's filename rules:
- * control characters, Windows-illegal filename chars (`< > : " | ? *`), and
- * Windows-reserved stems are rejected. Additionally rejects path separators
- * (POSIX `/` and Windows `\`) — a filename is never supposed to contain those,
- * and accepting them would silently create a subdirectory or split the path.
+ * control characters and Windows-reserved stems are rejected everywhere;
+ * Windows-illegal filename chars (`< > : " | ? *`) only when `isWindows`.
+ * Additionally rejects path separators (POSIX `/` and Windows `\`) - a filename
+ * is never supposed to contain those, and accepting them would silently create a
+ * subdirectory or split the path.
+ *
+ * `isWindows` defaults to the running host; pass it explicitly in tests.
  */
-export function validateSaveName(name: string): TranslationKey | null {
+export function validateSaveName(
+  name: string,
+  isWindows: boolean = pathSep() === '\\'
+): TranslationKey | null {
   if (name.trim() === '') return 'save.error.empty';
   if (containsAny(name, CONTROL_CHARS)) return 'save.error.invalid_chars';
   if (containsAny(name, PATH_SEPARATORS_IN_NAME)) return 'save.error.invalid_chars';
-  if (containsAny(name, WINDOWS_ILLEGAL_NAME_CHARS)) return 'save.error.invalid_chars';
+  if (isWindows && containsAny(name, WINDOWS_ILLEGAL_NAME_CHARS)) return 'save.error.invalid_chars';
   const upperStem = stem(name).toUpperCase();
   if (WINDOWS_RESERVED_STEMS.has(upperStem)) return 'save.error.invalid_chars';
   return null;
