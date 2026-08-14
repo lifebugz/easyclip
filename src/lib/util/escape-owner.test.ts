@@ -50,6 +50,25 @@ test('isEscapeOwned() stays true while any other owner remains registered', asyn
   expect(isEscapeOwned()).toBe(false);
 });
 
+test('a close→reopen within ONE task keeps the owner registered', async () => {
+  // ConfirmModal's escapeId is a STABLE per-instance symbol, so an open→false→true
+  // flip inside a single task (two queued confirmations, or a confirm handler that
+  // immediately raises another) re-registers the SAME id while the close's deferred
+  // removal is still pending. Unless that timer is cancelled it fires afterwards and
+  // deletes a live owner - isEscapeOwned() then reads false with a modal open, and
+  // the next Escape double-fires: the modal cancels AND the timeline dismisses the
+  // merge prompt behind it. That is exactly what this registry exists to prevent.
+  const id = Symbol('modal');
+  registerEscapeOwner(id);
+  unregisterEscapeOwner(id); // close
+  registerEscapeOwner(id); // reopen, same task, same symbol
+  await macrotask(); // the close's stale timer fires here
+  expect(isEscapeOwned()).toBe(true);
+  unregisterEscapeOwner(id);
+  await macrotask();
+  expect(isEscapeOwned()).toBe(false);
+});
+
 test('a deferred removal is a no-op once the id is already gone (idempotent)', async () => {
   const id = Symbol('modal');
   registerEscapeOwner(id);

@@ -32,18 +32,34 @@
 // [open] attribute is already stripped by dialogEl.close() in that first flush.
 
 const owners = new Set<symbol>();
+const pendingRemovals = new Map<symbol, ReturnType<typeof setTimeout>>();
 
 export function registerEscapeOwner(id: symbol): void {
+  // Cancel a pending removal for this id: callers re-register a STABLE per-instance
+  // symbol (ConfirmModal's escapeId), so an open→false→true flip inside ONE task
+  // would otherwise let the close's deferred delete fire after the reopen and drop
+  // a live owner - isEscapeOwned() false with a modal open, and the next Escape
+  // double-fires. Registration must win over a not-yet-settled unregistration.
+  const pending = pendingRemovals.get(id);
+  if (pending !== undefined) {
+    clearTimeout(pending);
+    pendingRemovals.delete(id);
+  }
   owners.add(id);
 }
 
 export function unregisterEscapeOwner(id: symbol): void {
-  // Deferred to a MACROTASK by design — see the "Timing" note above (a microtask
-  // is NOT enough: it drains between the two window keyup listeners). delete() is
-  // idempotent, and the owner is only ever re-registered in a LATER task (a fresh
-  // user action, after this timer has fired), so the deferral can never clobber a
-  // still-open overlay's registration.
-  setTimeout(() => owners.delete(id), 0);
+  // Deferred to a MACROTASK by design - see the "Timing" note above (a microtask
+  // is NOT enough: it drains between the two window keyup listeners).
+  const existing = pendingRemovals.get(id);
+  if (existing !== undefined) clearTimeout(existing);
+  pendingRemovals.set(
+    id,
+    setTimeout(() => {
+      owners.delete(id);
+      pendingRemovals.delete(id);
+    }, 0)
+  );
 }
 
 /** True when any overlay currently owns Escape (i.e. a modal is open). */
