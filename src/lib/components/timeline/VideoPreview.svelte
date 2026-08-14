@@ -411,12 +411,27 @@
   });
 
   // Debounced scrub while paused (poster mode only).
+  //
+  // Re-arms instead of firing while another extract is in flight. The pump above
+  // honours `posterInFlight` ("one in flight at a time so slow hardware backs off
+  // naturally") but this path used to call extractPosterNow() unconditionally, so
+  // scrubbing twice across one slow ffmpeg extract put two spawns on the same file
+  // and whichever finished first cleared the flag out from under the other. NOT a
+  // plain `if (posterInFlight) return`: dropping the request would strand the
+  // poster on an older frame, which is worse than the extra spawn. Re-arming keeps
+  // latest-wins - the effect re-runs on every playhead write, clearing this timer.
   $effect(() => {
     void wizardState.playhead; // track
     if (previewMode !== 'poster' || wizardState.playing) return;
-    const timer = setTimeout(() => {
+    let timer: ReturnType<typeof setTimeout>;
+    const attempt = (): void => {
+      if (posterInFlight) {
+        timer = setTimeout(attempt, POSTER_MIN_SPACING_MS);
+        return;
+      }
       void extractPosterNow();
-    }, POSTER_SCRUB_DEBOUNCE_MS);
+    };
+    timer = setTimeout(attempt, POSTER_SCRUB_DEBOUNCE_MS);
     return () => {
       clearTimeout(timer);
     };
