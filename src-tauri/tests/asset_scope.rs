@@ -52,13 +52,55 @@ fn is_allowed(path: &str, patterns: &[Pattern], opts: &MatchOptions) -> bool {
         .any(|p| p.matches_path_with(Path::new(path), *opts))
 }
 
-/// Every extension the file dialog accepts — mirrors VIDEO_EXTENSIONS +
-/// AUDIO_EXTENSIONS in `src/lib/tauri/dialog.ts`. If a format is added there, add
-/// it here and to the allowlist, or its preview silently breaks.
-const MEDIA_EXTS: &[&str] = &[
-    "mp4", "mov", "m4v", "mkv", "webm", "avi", "wmv", "flv", "mpg", "mpeg", "ts", "3gp", "3g2",
-    "mts", "m2ts", "mp3", "m4a", "aac", "wav", "flac", "ogg", "opus",
-];
+/// Every extension the file dialog accepts, READ FROM the canonical list in
+/// `src/lib/tauri/dialog.ts` instead of restated here.
+///
+/// A hand-copy cannot catch the drift this guard exists to warn about: add
+/// `m4b` to dialog.ts and forget `tauri.conf.json`, and the picker offers a file
+/// whose preview silently degrades to art while this test - and clippy, and every
+/// e2e spec - stays green. Same trick as `allow_patterns()` above: `include_str!`
+/// embeds the real source at compile time, so there is no runtime file IO and the
+/// path resolves relative to THIS file rather than the test's working directory.
+///
+/// Borrowing `&'static str` out of the embedded source rather than allocating
+/// `String`s: the slices point into a `'static` buffer, so they outlive any
+/// caller for free.
+fn media_exts() -> Vec<&'static str> {
+    const DIALOG_TS: &str = include_str!("../../src/lib/tauri/dialog.ts");
+    ["VIDEO_EXTENSIONS", "AUDIO_EXTENSIONS"]
+        .iter()
+        .flat_map(|name| {
+            let decl = format!("const {name} = [");
+            let start = DIALOG_TS.find(&decl).unwrap_or_else(|| {
+                panic!("{name} not found in dialog.ts (renamed or reformatted?)")
+            }) + decl.len();
+            let len = DIALOG_TS[start..]
+                .find(']')
+                .unwrap_or_else(|| panic!("unterminated {name} array in dialog.ts"));
+            DIALOG_TS[start..start + len]
+                .split(',')
+                .map(|tok| tok.trim().trim_matches('\''))
+                .filter(|e| !e.is_empty())
+                .collect::<Vec<_>>()
+        })
+        .collect()
+}
+
+/// Without this, a dialog.ts reformat that defeats the parser would yield an
+/// EMPTY list, and the extension loop below would pass vacuously - a green test
+/// asserting nothing at all.
+#[test]
+fn dialog_ts_extension_list_actually_parses() {
+    let exts = media_exts();
+    assert!(
+        exts.len() >= 20,
+        "parsed only {} extensions from dialog.ts; the parser broke on a reformat: {exts:?}",
+        exts.len()
+    );
+    for must in ["mp4", "mov", "mkv", "ts", "mp3", "opus"] {
+        assert!(exts.contains(&must), "expected {must:?} among {exts:?}");
+    }
+}
 
 fn mixed_case(s: &str) -> String {
     s.char_indices()
@@ -76,7 +118,7 @@ fn mixed_case(s: &str) -> String {
 fn allows_every_supported_media_extension_in_any_case_and_depth() {
     let patterns = allow_patterns();
     let opts = scope_options();
-    for ext in MEDIA_EXTS {
+    for ext in media_exts() {
         // lowercase (clip.mp4), UPPERCASE (camera CLIP.MOV/.MP4), and mixed (Mp4).
         for cased in [ext.to_string(), ext.to_uppercase(), mixed_case(ext)] {
             for path in [
