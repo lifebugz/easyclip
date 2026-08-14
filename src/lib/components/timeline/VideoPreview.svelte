@@ -337,13 +337,24 @@
   let posterInFlight = false;
   let lastPosterStart = 0;
 
+  // untrack: an extract is a snapshot at the instant it is requested, not a
+  // reactive computation. `wizardState.playhead` is evaluated as posterFrame's
+  // argument BEFORE the first await, so read tracked it becomes a dependency of
+  // whichever caller is synchronous - the pump effect below, which calls pump()
+  // in its body. In poster mode the virtual RAF writes playhead every frame, so
+  // the effect documented as re-running "NOT on every playhead write" got one
+  // spurious teardown per playback start (measured 2 effect runs, 1 after this).
+  // Self-limiting rather than per-frame, because a backed-off pump() never
+  // reaches this read and so drops the dependency again - but the effect should
+  // depend on what its comment says it depends on.
   async function extractPosterNow(): Promise<void> {
-    if (previewMode !== 'poster' || path === '') return;
+    const snap = untrack(() => ({ mode: previewMode, src: path, at: wizardState.playhead }));
+    if (snap.mode !== 'poster' || snap.src === '') return;
     posterInFlight = true;
     lastPosterStart = performance.now();
     const myGen = ++posterGen;
     try {
-      const src = await posterFrame(path, wizardState.playhead);
+      const src = await posterFrame(snap.src, snap.at);
       if (myGen === posterGen) posterSrc = src; // drop stale resolves
     } catch {
       /* keep the previous poster / show the art backdrop — never crash */
