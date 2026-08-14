@@ -478,3 +478,47 @@ test('play() rejected with AbortError resets the transport (no stuck Pause + fro
   // 'Pause' indefinitely and this assertion fails.
   await expect(playBtn).toHaveAttribute('aria-label', 'Play');
 });
+
+test('leaving the Edit step cancels an in-flight preview proxy', async ({ page }) => {
+  // The proxy-teardown effect ran cancelPreviewProxy() only in its BODY, keyed on
+  // `url`. `url` cannot change while VideoPreview is mounted (a new file always
+  // routes through file-pick, which unmounts it), so the cancel fired on mount and
+  // never again — leaving the Edit step let a multi-minute libx264 transcode keep
+  // running, competing with the export ffmpeg for CPU and writing $state on a
+  // destroyed component. The fix is a teardown, which for the same reason can only
+  // ever fire on unmount.
+  await installTauriMocks(page, {
+    convertFileSrcBase: ASSET_STUB_BASE,
+    proxyDelayMs: 10_000 // hold the build in flight across the navigation
+  });
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  await page.route(`${ASSET_STUB_BASE}/**`, (_route) => {
+    /* pending forever */
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Choose file…' }).click();
+  await page.getByRole('button', { name: 'Continue' }).click();
+
+  const video = page.locator('video.preview-video');
+  await expect(video).toBeAttached();
+  await video.evaluate((el) => el.dispatchEvent(new Event('error')));
+  await expect
+    .poll(async () =>
+      page.evaluate(() => (window as unknown as { __proxyCalls?: unknown[] }).__proxyCalls ?? [])
+    )
+    .toHaveLength(1);
+
+  const before = await page.evaluate(
+    () => (window as unknown as { __proxyCancelCalls?: number }).__proxyCancelCalls ?? 0
+  );
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Where should we save?');
+
+  await expect
+    .poll(async () =>
+      page.evaluate(
+        () => (window as unknown as { __proxyCancelCalls?: number }).__proxyCancelCalls ?? 0
+      )
+    )
+    .toBeGreaterThan(before);
+});

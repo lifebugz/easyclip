@@ -132,6 +132,19 @@
         failToPoster(); // poster shows extracted frames while the proxy builds
       }
     });
+
+    // Kill an in-flight build on UNMOUNT (Continue → Save, Back, Start Over).
+    // Without it a multi-minute libx264 preview transcode outlives the step and
+    // competes with run_processing's export for CPU, and its .then/.catch write
+    // $state on a destroyed component. `url` cannot change while this component
+    // is mounted - a different file always routes through file-pick, which
+    // unmounts it - so this teardown only ever runs on unmount and can never
+    // double-cancel against the body's own cancel above.
+    return () => {
+      void cancelPreviewProxy().catch(() => {
+        /* nothing to cancel outside Tauri */
+      });
+    };
   });
 
   // Route to poster and stop playback (Task 8 invariant: every video→poster
