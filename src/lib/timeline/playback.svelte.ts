@@ -31,7 +31,20 @@ export function bindPreviewMedia(el: HTMLVideoElement | null): void {
   // so when the <video> mounts AFTER that effect last ran it would otherwise sit at
   // currentTime 0 until the next playhead write. Paused-only: while playing, play()
   // already seeks before the RAF takes over, so leave that path untouched.
-  if (!wizardState.playing) el.currentTime = wizardState.playhead;
+  //
+  // untrack is load-bearing, same class as the RAF effect's pendingSeek init
+  // below. These are one-shot seeding reads, NOT a subscription: tracked, they
+  // make the CALLER's $effect (VideoPreview's bind effect, whose only intended
+  // dependency is the element ref) depend on `playing` - and on `playhead` too
+  // while paused. Every play/pause then tears that effect down, and its cleanup
+  // calls bindPreviewMedia(null), which clears the boundary-seek latch the RAF
+  // effect had just set one line earlier - so a play()-issued seek that has not
+  // landed is no longer held, and the first tick re-issues a redundant boundary
+  // seek and nudges the playhead by SEEK_EPSILON. Measured in a real browser:
+  // pressing Play ran the bind effect twice (teardown + re-run); untracked, zero.
+  untrack(() => {
+    if (!wizardState.playing) el.currentTime = wizardState.playhead;
+  });
 }
 
 export function play(): void {
