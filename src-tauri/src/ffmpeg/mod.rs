@@ -2,6 +2,7 @@
 
 pub mod concat;
 pub mod invoker;
+pub mod job;
 pub mod poster;
 pub mod probe;
 pub mod progress;
