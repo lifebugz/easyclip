@@ -10,7 +10,8 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use crate::error::{classify_stderr, AppError};
-use crate::ffmpeg::invoker::{FfmpegInvoker, KillHandle, ProbePass, RunEvent};
+use crate::ffmpeg::invoker::{FfmpegInvoker, ProbePass, RunEvent};
+use crate::ffmpeg::job::{self, JobState, SharedJob};
 use crate::ffmpeg::probe::parse_probe_json;
 use crate::ffmpeg::progress::ProgressParser;
 use crate::ffmpeg::proxy::{
@@ -20,14 +21,17 @@ use crate::ffmpeg::proxy_cache::{proxy_cache_filename, sweep_proxy_cache, PROXY_
 use crate::processing::output::rename_with_retry;
 use crate::validation::validate_media_path;
 
+/// The preview-proxy job slot. A newtype, not an alias: see
+/// `ffmpeg::job::SharedJob` for why the two slots must remain distinct types.
 #[derive(Default)]
-pub struct ProxyJob {
-    pub active: bool,
-    pub kill: Option<KillHandle>,
-    pub cancel_requested: bool,
-}
+pub struct ProxyState(pub SharedJob);
 
-pub type ProxyState = std::sync::Mutex<ProxyJob>;
+impl std::ops::Deref for ProxyState {
+    type Target = SharedJob;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 
 /// Progress event streamed to the frontend while the proxy builds.
 /// `fraction: None` = indeterminate (non-finite source duration).
@@ -49,16 +53,6 @@ pub struct ProxyResult {
 /// claim (its ActiveGuard drops as the stale task unwinds).
 const CLAIM_WAIT: Duration = Duration::from_secs(2);
 const CLAIM_POLL: Duration = Duration::from_millis(50);
-
-/// Clears `active` + `kill` on every exit path (success, error, panic).
-struct ActiveGuard<'a>(&'a ProxyState);
-impl Drop for ActiveGuard<'_> {
-    fn drop(&mut self) {
-        let mut j = self.0.lock().unwrap();
-        j.active = false;
-        j.kill = None;
-    }
-}
 
 /// Removes the `.part` unless disarmed (success path renames it first).
 struct PartGuard {
@@ -83,7 +77,7 @@ async fn claim(state: &ProxyState) -> Result<(), AppError> {
         {
             let mut j = state.lock().unwrap();
             if !j.active {
-                *j = ProxyJob {
+                *j = JobState {
                     active: true,
                     kill: None,
                     cancel_requested: false,
@@ -122,7 +116,7 @@ pub async fn run_proxy(
     emit: &(dyn Fn(ProxyEvent) + Send + Sync),
 ) -> Result<ProxyResult, AppError> {
     claim(state).await?;
-    let _active = ActiveGuard(state);
+    let _active = job::ActiveGuard(state);
 
     let source_path = validate_media_path(source)?;
 
@@ -200,20 +194,7 @@ pub async fn run_proxy(
     };
 
     let mut run = invoker.spawn_ffmpeg(args).await?;
-
-    // Publish the kill handle - or self-kill if a cancel already landed.
-    let mut self_killed = false;
-    {
-        let mut j = state.lock().unwrap();
-        let kill: KillHandle = std::mem::replace(&mut run.kill, Box::new(|| {}));
-        if j.cancel_requested {
-            drop(j);
-            kill();
-            self_killed = true;
-        } else {
-            j.kill = Some(kill);
-        }
-    }
+    let self_killed = job::publish_kill(state, &mut run);
 
     let span_us = if fields.duration.is_finite() && fields.duration > 0.0 {
         Some(fields.duration * 1_000_000.0)
@@ -245,11 +226,7 @@ pub async fn run_proxy(
         }
     }
 
-    let cancelled = {
-        let mut j = state.lock().unwrap();
-        j.kill = None;
-        j.cancel_requested || self_killed
-    };
+    let cancelled = job::take_verdict(state, self_killed);
 
     if cancelled {
         return Err(AppError::OperationCancelled); // PartGuard removes the .part

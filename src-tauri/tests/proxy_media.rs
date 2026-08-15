@@ -46,7 +46,7 @@ mod common;
 use easyclip_lib::error::AppError;
 use easyclip_lib::ffmpeg::invoker::PathInvoker;
 use easyclip_lib::ffmpeg::proxy::REMUX_SAFE_AUDIO;
-use easyclip_lib::ffmpeg::proxy_run::{run_proxy, ProxyEvent, ProxyJob, ProxyResult, ProxyState};
+use easyclip_lib::ffmpeg::proxy_run::{run_proxy, ProxyEvent, ProxyResult, ProxyState};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use tempfile::TempDir;
@@ -196,7 +196,7 @@ struct Case {
 }
 
 async fn build_proxy(source: &Path, cache: &Path) -> Result<ProxyResult, AppError> {
-    let state: ProxyState = ProxyState::new(ProxyJob::default());
+    let state = ProxyState::default();
     let emit = |_: ProxyEvent| {};
     run_proxy(
         &PathInvoker,

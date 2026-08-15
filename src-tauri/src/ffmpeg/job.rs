@@ -22,6 +22,11 @@ pub struct JobState {
     pub cancel_requested: bool,
 }
 
+/// One feature's job slot. Each feature wraps this in its OWN newtype rather
+/// than aliasing it directly: Tauri's `manage`/`try_state` are keyed by `TypeId`,
+/// so two `type XState = SharedJob` aliases would be the same type - the second
+/// `manage()` would collide with the first, and cancelling a preview proxy would
+/// reach into the export job. See `ProcessingState` / `ProxyState`.
 pub type SharedJob = std::sync::Mutex<JobState>;
 
 /// Publish `run`'s kill handle so a concurrent cancel can reach the child - or,
