@@ -122,7 +122,34 @@ pub async fn run_proxy(
 
     // Re-probe - authoritative for the decision; the original UI probe stays
     // authoritative for everything the UI shows.
-    let out = invoker.probe(ProbePass::Json, &source_path).await?;
+    //
+    // Polled against `cancel_requested` rather than simply awaited. The probe is
+    // the one phase of a build that publishes no kill handle (FfmpegInvoker::probe
+    // hands one back from neither impl), so a plain await held the claim slot in a
+    // state where claim() could not evict us: a predecessor parked here on a large
+    // or network-backed file kept `active` with `kill == None`, the successor's
+    // claim() polled to its CLAIM_WAIT deadline and returned ProcessingFailed, the
+    // frontend burned its one retry, and the preview settled on poster for a file
+    // that was perfectly playable. Bailing here instead releases the slot through
+    // ActiveGuard within one CLAIM_POLL, so the successor wins it. The ffprobe
+    // child is abandoned rather than killed - it is a read-only metadata pass that
+    // exits on its own.
+    let probe_fut = invoker.probe(ProbePass::Json, &source_path);
+    tokio::pin!(probe_fut);
+    let out = loop {
+        tokio::select! {
+            done = &mut probe_fut => break done?,
+            _ = tokio::time::sleep(CLAIM_POLL) => {
+                // Bind before testing: a `MutexGuard` temporary in an `if`
+                // scrutinee lives to the end of the whole `if` statement, which
+                // would put a std lock across the await above (spec 2.1).
+                let cancelled = state.lock().unwrap().cancel_requested;
+                if cancelled {
+                    return Err(AppError::OperationCancelled);
+                }
+            }
+        }
+    };
     if !out.success() {
         return Err(classify_stderr(&out.stderr));
     }
@@ -264,7 +291,7 @@ fn method_name(m: ProxyMethod) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ffmpeg::invoker::{MockInvoker, ScriptedRun};
+    use crate::ffmpeg::invoker::{FfmpegRun, MockInvoker, ProcessOutput, ScriptedRun};
     use std::sync::{Arc, Mutex};
     use std::time::SystemTime;
 
@@ -329,6 +356,75 @@ mod tests {
             )
             .await
         }
+    }
+
+    /// Probe that takes its time, so a cancel can land while it is in flight.
+    /// `spawn_ffmpeg` panics: reaching it means the run failed to bail.
+    struct SlowProbeInvoker(Duration);
+
+    #[async_trait::async_trait]
+    impl FfmpegInvoker for SlowProbeInvoker {
+        async fn probe(&self, _pass: ProbePass, _file: &Path) -> Result<ProcessOutput, AppError> {
+            tokio::time::sleep(self.0).await;
+            Ok(ProcessOutput {
+                stdout: PROBE_MKV_H264_AAC.to_string(),
+                stderr: String::new(),
+                status: Some(0),
+            })
+        }
+
+        async fn spawn_ffmpeg(&self, _args: Vec<String>) -> Result<FfmpegRun, AppError> {
+            panic!("run_proxy must bail during the probe, never reach the spawn");
+        }
+    }
+
+    #[tokio::test]
+    async fn a_cancel_during_the_probe_releases_the_claim_slot() {
+        // The probe publishes no kill handle, so claim() cannot evict a build
+        // parked in it. Before this was polled, the slot stayed `active` with
+        // `kill == None` for the whole probe: a successor claim() ran out its
+        // CLAIM_WAIT and returned ProcessingFailed, the frontend burned its one
+        // retry, and a perfectly playable file settled on poster.
+        let f = Fixture::new();
+        let probe_ms = 2_000;
+        let invoker = SlowProbeInvoker(Duration::from_millis(probe_ms));
+
+        // Bound, not inlined: `build` is polled later by join!, so temporaries
+        // created inside the `let` statement would be freed while still borrowed
+        // (E0716). The sibling `Fixture::run` gets away with `&f.emit()` only
+        // because it awaits in the same expression.
+        let cache_dir = f.cache_dir();
+        let emit = f.emit();
+        let started = std::time::Instant::now();
+        let build = run_proxy(
+            &invoker,
+            &f.state,
+            f.source.to_str().unwrap(),
+            &cache_dir,
+            false,
+            &emit,
+        );
+        let cancel = async {
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            f.state.lock().unwrap().cancel_requested = true;
+        };
+        let (result, ()) = tokio::join!(build, cancel);
+        let elapsed = started.elapsed();
+
+        assert!(
+            matches!(result, Err(AppError::OperationCancelled)),
+            "got {result:?}"
+        );
+        assert!(
+            elapsed < Duration::from_millis(probe_ms),
+            "must bail mid-probe, not wait it out (took {elapsed:?})"
+        );
+        assert!(
+            !f.state.lock().unwrap().active,
+            "ActiveGuard must release the slot so the successor's claim() wins"
+        );
+        // The real proof: a successor can now take the slot immediately.
+        claim(&f.state).await.expect("successor must win the slot");
     }
 
     fn mock_with_probe() -> MockInvoker {
