@@ -173,13 +173,27 @@ pub async fn run_proxy(
     let meta = std::fs::metadata(&source_path).map_err(|e| AppError::Unknown {
         details: format!("source metadata: {e}"),
     })?;
-    let name = proxy_cache_filename(
-        &source_path,
-        meta.len(),
-        meta.modified().unwrap_or(std::time::SystemTime::UNIX_EPOCH),
-        method,
-        ext,
-    );
+    let mtime = meta.modified().unwrap_or(std::time::SystemTime::UNIX_EPOCH);
+
+    // A forced transcode means the remux rung is already spent: either its build
+    // failed (no artifact to drop) or the proxy it produced failed to DECODE. In
+    // that second case the artifact is known-bad yet still cached under the Remux
+    // key, so EVERY later session re-hits it, swaps the <video> onto it, fails
+    // decode again and walks the ladder again - and each hit touch()es it, so the
+    // LRU sweep actively protects the bad file. Nothing else records "remux is
+    // known-bad for this source", so drop it here.
+    if force_transcode {
+        let stale = cache_dir.join(proxy_cache_filename(
+            &source_path,
+            meta.len(),
+            mtime,
+            ProxyMethod::Remux,
+            ext,
+        ));
+        let _ = std::fs::remove_file(&stale);
+    }
+
+    let name = proxy_cache_filename(&source_path, meta.len(), mtime, method, ext);
     let final_path = cache_dir.join(&name);
 
     // Cache hit: no spawn at all (the mock test proves it - an unscripted
@@ -243,7 +257,13 @@ pub async fn run_proxy(
                             last_fraction = last_fraction.max((us as f64 / span).clamp(0.0, 0.99));
                             Some(last_fraction)
                         }
-                        _ => None,
+                        // ffmpeg emits `out_time_us=N/A` for individual blocks
+                        // mid-run. Keep-last, exactly as run_stage does, so the
+                        // note holds its percentage instead of flapping to
+                        // indeterminate and back. `None` keeps its DOCUMENTED
+                        // meaning (see ProxyEvent): a non-finite source duration.
+                        (Some(_), None) => Some(last_fraction),
+                        (None, _) => None,
                     };
                     emit(ProxyEvent { fraction });
                 }
@@ -425,6 +445,82 @@ mod tests {
         );
         // The real proof: a successor can now take the slot immediately.
         claim(&f.state).await.expect("successor must win the slot");
+    }
+
+    #[tokio::test]
+    async fn na_progress_block_holds_the_last_fraction() {
+        // ffmpeg emits `out_time_us=N/A` for individual blocks mid-run (the
+        // parser has its own test for it). Reporting None there made the note
+        // flap "Preparing preview... 45%" -> "Preparing preview..." -> back, and
+        // contradicted ProxyEvent's doc that None means a non-finite duration.
+        // run_stage keeps the last fraction; these two drain loops must agree.
+        let f = Fixture::new();
+        let expected = f.expected_final(ProxyMethod::Transcode);
+        let part = f.cache_dir().join(format!(
+            "{}.part",
+            expected.file_name().unwrap().to_string_lossy()
+        ));
+        std::fs::create_dir_all(f.cache_dir()).unwrap();
+        std::fs::write(&part, b"payload").unwrap();
+
+        let m = mock_with_probe();
+        m.push_run(ScriptedRun {
+            events: vec![
+                RunEvent::Stdout("out_time_us=5000000\nprogress=continue\n".into()),
+                RunEvent::Stdout("out_time_us=N/A\nprogress=continue\n".into()),
+                RunEvent::Terminated {
+                    code: Some(0),
+                    signal: None,
+                },
+            ],
+        });
+        f.run(&m, true).await.unwrap();
+
+        let evs = f.events.lock().unwrap();
+        let first = evs[0].fraction.expect("finite duration -> a real fraction");
+        assert_eq!(
+            evs[1].fraction,
+            Some(first),
+            "an N/A block must hold the last fraction, not go indeterminate"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_forced_transcode_drops_the_known_bad_remux_artifact() {
+        // The remux proxy built fine but the webview could not DECODE it, so the
+        // ladder forces a transcode. Without this the bad artifact stays cached
+        // under the Remux key and every later session re-hits it, re-fails decode
+        // and walks the ladder again - and touch() keeps the LRU sweep off it.
+        let f = Fixture::new();
+        let stale_remux = f.expected_final(ProxyMethod::Remux);
+        let transcoded = f.expected_final(ProxyMethod::Transcode);
+        std::fs::create_dir_all(f.cache_dir()).unwrap();
+        std::fs::write(&stale_remux, b"builds fine, will not decode").unwrap();
+        std::fs::write(
+            f.cache_dir().join(format!(
+                "{}.part",
+                transcoded.file_name().unwrap().to_string_lossy()
+            )),
+            b"transcoded payload",
+        )
+        .unwrap();
+        assert!(stale_remux.is_file(), "precondition");
+
+        let m = mock_with_probe();
+        m.push_run(ScriptedRun {
+            events: vec![RunEvent::Terminated {
+                code: Some(0),
+                signal: None,
+            }],
+        });
+        let r = f.run(&m, true).await.unwrap();
+
+        assert_eq!(r.method, "transcode");
+        assert!(
+            !stale_remux.is_file(),
+            "the known-bad remux artifact must be dropped, not left to be re-served"
+        );
+        assert!(transcoded.is_file());
     }
 
     fn mock_with_probe() -> MockInvoker {

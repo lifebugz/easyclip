@@ -45,7 +45,7 @@ mod common;
 
 use easyclip_lib::error::AppError;
 use easyclip_lib::ffmpeg::invoker::PathInvoker;
-use easyclip_lib::ffmpeg::proxy::REMUX_SAFE_AUDIO;
+use easyclip_lib::ffmpeg::proxy::{REMUX_SAFE_AUDIO, REMUX_SAFE_VIDEO};
 use easyclip_lib::ffmpeg::proxy_run::{run_proxy, ProxyEvent, ProxyResult, ProxyState};
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -159,6 +159,24 @@ fn mp3_with_cover_art() -> Fixture {
     Fixture { _dir: dir, path }
 }
 
+/// Encoder + expected mp4 codec tag for a `REMUX_SAFE_VIDEO` entry.
+///
+/// Same contract as `audio_recipe`: an allowlist row is a claim that `-c copy`
+/// of that codec produces a file ffmpeg will mux, and only a real run checks it.
+/// Without this the video list was `pub` and documented as sidecar-driven while
+/// nothing iterated it - so `hevc`, the ONLY codec whose remux emits
+/// `-tag:v hvc1`, was never built by the real ffmpeg at all.
+fn video_recipe(codec: &str) -> (&'static str, Option<&'static str>) {
+    match codec {
+        "h264" => ("libx264", None),
+        "hevc" => ("libx265", Some("hvc1")),
+        other => panic!(
+            "REMUX_SAFE_VIDEO gained {other:?} with no fixture recipe - add one \
+             so the real sidecar covers it (that is the whole point of this test)"
+        ),
+    }
+}
+
 /// Encoder + container for a `REMUX_SAFE_AUDIO` entry.
 ///
 /// The `panic!` is the point: adding a codec to the allowlist is a claim that
@@ -186,6 +204,11 @@ struct Case {
     want_video_codec: Option<&'static str>,
     /// Expected audio codec in the proxy; `None` for a silent source.
     want_audio_codec: Option<String>,
+    /// Expected video `codec_tag_string` in the proxy. `None` skips the check.
+    /// HEVC is the reason this exists: its remux is the only path that emits
+    /// `-tag:v hvc1`, without which the mp4 carries `hev1` and this WebKit
+    /// refuses it even though it supports the codec.
+    want_video_tag: Option<&'static str>,
     /// Expected ftyp major brand - the only thing that actually OBSERVES which
     /// muxer ran, since `ipod` and `mp4` share one ffprobe `format_name`
     /// ("mov,mp4,m4a,3gp,3g2,mj2"). `ipod` stamps `M4A `, `mp4` stamps `isom`.
@@ -309,6 +332,15 @@ async fn check(case: &Case) -> Vec<String> {
                     case.label
                 ));
             }
+            if let Some(want_tag) = case.want_video_tag {
+                let got = v["codec_tag_string"].as_str().unwrap_or("");
+                if got != want_tag {
+                    bad.push(format!(
+                        "{}: video codec_tag {got:?}, want {want_tag:?} (WebKit refuses hev1)",
+                        case.label
+                    ));
+                }
+            }
             if case.check_scaled_dims {
                 let w = v["width"].as_i64().unwrap_or(0);
                 let h = v["height"].as_i64().unwrap_or(0);
@@ -357,39 +389,6 @@ async fn check(case: &Case) -> Vec<String> {
 
 fn cases() -> Vec<Case> {
     let mut cases = vec![
-        // ── Video, Remux ── h264+aac in MKV: the flagship case. The codecs are
-        // WebKit-safe; only the CONTAINER is rejected, so `-c copy` into mp4 is
-        // the whole fix. Both stream codecs must survive unchanged.
-        Case {
-            label: "video/remux h264+aac.mkv".into(),
-            fixture: lavfi(
-                "remuxable.mkv",
-                &[
-                    "-f",
-                    "lavfi",
-                    "-i",
-                    "testsrc=duration=2:size=320x240:rate=15",
-                    "-f",
-                    "lavfi",
-                    "-i",
-                    "sine=frequency=440:duration=2",
-                    "-c:v",
-                    "libx264",
-                    "-preset",
-                    "ultrafast",
-                    "-pix_fmt",
-                    "yuv420p",
-                    "-c:a",
-                    "aac",
-                ],
-            ),
-            want_method: "remux",
-            want_ext: "mp4",
-            want_video_codec: Some("h264"),
-            want_audio_codec: Some("aac".into()),
-            want_major_brand: Some("isom"),
-            check_scaled_dims: false,
-        },
         // ── Video, Transcode, ODD WIDTH (defect 3) ── 321x241 mpeg4+mp3 in AVI.
         // mpeg4 is not remux-safe, so this takes the ladder's last rung. libx264
         // itself refuses to ENCODE odd dimensions, so the fixture uses mpeg4 -
@@ -420,6 +419,7 @@ fn cases() -> Vec<Case> {
             want_ext: "mp4",
             want_video_codec: Some("h264"),
             want_audio_codec: Some("aac".into()),
+            want_video_tag: None,
             want_major_brand: Some("isom"),
             check_scaled_dims: true,
         },
@@ -446,6 +446,7 @@ fn cases() -> Vec<Case> {
             want_ext: "mp4",
             want_video_codec: Some("h264"),
             want_audio_codec: None,
+            want_video_tag: None,
             want_major_brand: Some("isom"),
             check_scaled_dims: true,
         },
@@ -469,10 +470,49 @@ fn cases() -> Vec<Case> {
             want_video_codec: None,
             want_audio_codec: Some("aac".into()),
             // A transcode re-encodes to AAC, so it keeps the `ipod` muxer.
+            want_video_tag: None,
             want_major_brand: Some("M4A "),
             check_scaled_dims: false,
         },
     ];
+
+    // ── Video, Remux - EVERY entry in the allowlist ──
+    // The codecs are WebKit-safe; only the CONTAINER is rejected, so `-c copy`
+    // into mp4 is the whole fix and both stream codecs must survive unchanged.
+    for codec in REMUX_SAFE_VIDEO {
+        let (encoder, want_tag) = video_recipe(codec);
+        cases.push(Case {
+            label: format!("video/remux {codec}+aac.mkv"),
+            fixture: lavfi(
+                &format!("remuxable-{codec}.mkv"),
+                &[
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    "testsrc=duration=2:size=320x240:rate=15",
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    "sine=frequency=440:duration=2",
+                    "-c:v",
+                    encoder,
+                    "-preset",
+                    "ultrafast",
+                    "-pix_fmt",
+                    "yuv420p",
+                    "-c:a",
+                    "aac",
+                ],
+            ),
+            want_method: "remux",
+            want_ext: "mp4",
+            want_video_codec: Some(codec),
+            want_audio_codec: Some("aac".into()),
+            want_video_tag: want_tag,
+            want_major_brand: Some("isom"),
+            check_scaled_dims: false,
+        });
+    }
 
     // ── Audio, Remux - EVERY entry in the allowlist (defect 2 is the mp3 row) ──
     // Driven off the real `REMUX_SAFE_AUDIO` rather than a copy of it, so a
@@ -500,6 +540,7 @@ fn cases() -> Vec<Case> {
             // mp3 cannot be tagged by `ipod`, so it muxes `mp4` (brand `isom`);
             // aac/alac keep `ipod` and its `M4A ` brand. This is the assertion
             // that actually OBSERVES which muxer ran.
+            want_video_tag: None,
             want_major_brand: Some(if *codec == "mp3" { "isom" } else { "M4A " }),
             check_scaled_dims: false,
         });
@@ -517,6 +558,7 @@ fn cases() -> Vec<Case> {
         // `-vn` drops the cover, so the proxy carries audio only.
         want_video_codec: None,
         want_audio_codec: Some("mp3".into()),
+        want_video_tag: None,
         want_major_brand: Some("isom"),
         check_scaled_dims: false,
     });

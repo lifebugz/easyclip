@@ -9,6 +9,7 @@
 
 use crate::error::{classify_stderr, AppError};
 use crate::ffmpeg::invoker::{FfmpegInvoker, RunEvent};
+use crate::ffmpeg::job::{self, SharedJob};
 use crate::ffmpeg::trim::fmt_seconds;
 use base64::Engine;
 use std::path::Path;
@@ -61,6 +62,29 @@ async fn collect_outcome(run: &mut crate::ffmpeg::invoker::FfmpegRun) -> (Option
     (code, stderr)
 }
 
+/// The poster-extraction job slot. A newtype, not an alias: see
+/// `ffmpeg::job::SharedJob` for why each slot must be a distinct type.
+///
+/// Poster extraction was the only ffmpeg-spawning command with NO slot at all:
+/// it published no kill handle, so nothing could stop it. During poster playback
+/// the pump issues one roughly every 100 ms, and an extract on a large or
+/// network-backed source can take seconds - which meant leaving the Edit step,
+/// or quitting the app, left that child running (lib.rs's Exit hook could only
+/// reach the processing and proxy slots), competing with the export for CPU.
+///
+/// One slot, so only the MOST RECENT extract is killable. Extracts are meant to
+/// be one-at-a-time (both callers gate on `posterInFlight`), and killing the
+/// latest is strictly better than killing none.
+#[derive(Default)]
+pub struct PosterState(pub SharedJob);
+
+impl std::ops::Deref for PosterState {
+    type Target = SharedJob;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
 pub struct PosterCommand;
 
 impl PosterCommand {
@@ -69,6 +93,7 @@ impl PosterCommand {
     /// wrapper enforces this, mirroring ProbeCommand::run).
     pub async fn run(
         invoker: &dyn FfmpegInvoker,
+        job: &SharedJob,
         file: &Path,
         time_seconds: f64,
     ) -> Result<String, AppError> {
@@ -82,7 +107,11 @@ impl PosterCommand {
 
         let args = build_poster_args(file, time_seconds, tmp.path());
         let mut run = invoker.spawn_ffmpeg(args).await?;
+        let self_killed = job::publish_kill(job, &mut run);
         let (code, stderr) = collect_outcome(&mut run).await;
+        if job::take_verdict(job, self_killed) {
+            return Err(AppError::OperationCancelled);
+        }
         if code != Some(0) {
             return Err(classify_stderr(&stderr));
         }
@@ -181,10 +210,42 @@ mod tests {
                 },
             ],
         });
-        let r = PosterCommand::run(m.as_ref(), &PathBuf::from("/tmp/x.mp4"), 1.0).await;
+        let r = PosterCommand::run(
+            m.as_ref(),
+            &SharedJob::default(),
+            &PathBuf::from("/tmp/x.mp4"),
+            1.0,
+        )
+        .await;
         assert!(
             matches!(r, Err(AppError::MediaCorrupted { .. })),
             "got {r:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_pending_cancel_stops_the_extract() {
+        // Poster extraction used to publish no kill handle at all, so nothing
+        // could stop it: leaving the Edit step or quitting the app left the child
+        // running (the Exit hook could only reach the processing and proxy slots).
+        // With a slot, a cancel that landed before the spawn self-kills here and
+        // the caller learns it was cancelled rather than "failed".
+        let m = Arc::new(MockInvoker::ok("{}", ""));
+        m.push_run(ScriptedRun {
+            events: terminated(Some(0)),
+        });
+        let job = SharedJob::default();
+        job.lock().unwrap().cancel_requested = true;
+
+        let r = PosterCommand::run(m.as_ref(), &job, &PathBuf::from("/tmp/x.mp4"), 0.0).await;
+
+        assert!(
+            matches!(r, Err(AppError::OperationCancelled)),
+            "a pending cancel must stop the extract, got {r:?}"
+        );
+        assert!(
+            job.lock().unwrap().kill.is_none(),
+            "no stale handle may outlive the run"
         );
     }
 
@@ -202,7 +263,13 @@ mod tests {
         m.push_run(ScriptedRun {
             events: terminated(Some(0)),
         });
-        let r = PosterCommand::run(m.as_ref(), &PathBuf::from("/tmp/x.mp4"), 0.0).await;
+        let r = PosterCommand::run(
+            m.as_ref(),
+            &SharedJob::default(),
+            &PathBuf::from("/tmp/x.mp4"),
+            0.0,
+        )
+        .await;
         assert!(
             matches!(r, Err(AppError::Unknown { .. })),
             "exit-0 with 0-byte output must reject, got {r:?}"

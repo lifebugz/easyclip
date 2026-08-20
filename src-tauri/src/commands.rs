@@ -48,10 +48,12 @@ pub async fn extract_poster_frame(
     path: String,
     time_seconds: f64,
     state: tauri::State<'_, FfmpegInvokerHandle>,
+    poster: tauri::State<'_, crate::ffmpeg::poster::PosterState>,
 ) -> Result<String, AppError> {
     let validated = validate_media_path(&path)?;
     let invoker: &dyn FfmpegInvoker = state.inner().as_ref();
-    crate::ffmpeg::poster::PosterCommand::run(invoker, &validated as &Path, time_seconds).await
+    crate::ffmpeg::poster::PosterCommand::run(invoker, &poster, &validated as &Path, time_seconds)
+        .await
 }
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
@@ -288,7 +290,13 @@ mod tests {
         let handle: FfmpegInvokerHandle = Arc::new(mock);
 
         let validated = validate_media_path(&path_str).unwrap();
-        let r = crate::ffmpeg::poster::PosterCommand::run(handle.as_ref(), &validated, 0.0).await;
+        let r = crate::ffmpeg::poster::PosterCommand::run(
+            handle.as_ref(),
+            &crate::ffmpeg::job::SharedJob::default(),
+            &validated,
+            0.0,
+        )
+        .await;
         assert!(matches!(r, Err(AppError::Unknown { .. })), "got {r:?}");
     }
 }
