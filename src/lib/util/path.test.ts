@@ -70,13 +70,10 @@ test('bootstrapPathSep() is a no-op when window is undefined (Bun / non-Tauri)',
 
 test('bootstrapPathSep() is a no-op when __TAURI_INTERNALS__ is absent (Playwright web)', async () => {
   (globalThis as unknown as { window?: unknown }).window = {}; // present, but no Tauri internals
-  try {
-    await bootstrapPathSep();
-    expect(pathSep()).toBe('/');
-    expect(tauriSepMock).not.toHaveBeenCalled();
-  } finally {
-    delete (globalThis as unknown as { window?: unknown }).window;
-  }
+  // afterEach deletes window — no per-test teardown needed (matches the sibling tests).
+  await bootstrapPathSep();
+  expect(pathSep()).toBe('/');
+  expect(tauriSepMock).not.toHaveBeenCalled();
 });
 
 test('pathStem returns the filename without extension, given a POSIX path', () => {

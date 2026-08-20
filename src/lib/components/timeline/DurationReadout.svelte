@@ -18,7 +18,10 @@
     <span class="readout-val">{formatDuration(original)}</span>
   </span>
   <span class="readout-piece small muted readout-arrow" aria-hidden="true">→</span>
-  <span class="readout-piece" class:is-computing={computing}>
+  <!-- aria-busy mirrors the visual `is-computing` dim: while the exact plan is
+       recomputing, the FINAL value is transient, so assistive tech should treat it
+       as busy and not announce the in-flight figure as the settled duration. -->
+  <span class="readout-piece" class:is-computing={computing} aria-busy={computing}>
     <span class="readout-key">{t('edit.final')}</span>
     <span class="readout-val">{formatDuration(final)}</span>
   </span>

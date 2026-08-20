@@ -19,6 +19,7 @@ function baseState(over: Partial<WizardStateShape> = {}): WizardStateShape {
       container: 'mov,mp4',
       codec: 'h264',
       ext: 'mp4',
+      hasRealVideo: true,
       hasAudio: true,
       keyframes: []
     },
@@ -184,6 +185,7 @@ function infoWithDuration(duration: number): WizardStateShape['mediaInfo'] {
     container: 'mov,mp4',
     codec: 'h264',
     ext: 'mp4',
+    hasRealVideo: true,
     hasAudio: true,
     keyframes: []
   };

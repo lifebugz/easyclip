@@ -5,19 +5,23 @@ pub mod output;
 pub mod plan;
 
 use crate::error::AppError;
-use crate::ffmpeg::invoker::{FfmpegInvoker, KillHandle, RunEvent};
+use crate::ffmpeg::invoker::{FfmpegInvoker, RunEvent};
+use crate::ffmpeg::job::{self, JobState, SharedJob};
 use crate::ffmpeg::progress::ProgressParser;
 
 // ── Shared contract types (Tasks 10/11 depend on exact shapes) ──────────────
 
+/// The export job slot. A newtype, not an alias: see `ffmpeg::job::SharedJob`
+/// for why the two slots must remain distinct types.
 #[derive(Default)]
-pub struct ProcessingJob {
-    pub active: bool,
-    pub kill: Option<KillHandle>,
-    pub cancel_requested: bool,
-}
+pub struct ProcessingState(pub SharedJob);
 
-pub type ProcessingState = std::sync::Mutex<ProcessingJob>;
+impl std::ops::Deref for ProcessingState {
+    type Target = SharedJob;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, serde::Serialize)]
 #[serde(rename_all = "lowercase")]
@@ -122,20 +126,7 @@ pub async fn run_stage(
     emit: &(dyn Fn(ProcessingEvent) + Send + Sync),
 ) -> Result<StageOutcome, AppError> {
     let mut run = invoker.spawn_ffmpeg(args).await?;
-
-    // Publish the kill handle — or self-kill if a cancel already landed.
-    let mut self_killed = false;
-    {
-        let mut j = job.lock().unwrap();
-        let kill: KillHandle = std::mem::replace(&mut run.kill, Box::new(|| {}));
-        if j.cancel_requested {
-            drop(j); // release the lock before calling kill (sync + fast)
-            kill();
-            self_killed = true;
-        } else {
-            j.kill = Some(kill);
-        }
-    }
+    let self_killed = job::publish_kill(job, &mut run);
 
     let mut parser = ProgressParser::new();
     let mut stderr = String::new();
@@ -191,13 +182,9 @@ pub async fn run_stage(
         }
     }
 
-    // Clear the handle (N5) and read the cancel verdict — cancel WINS over
+    // Clear the handle (N5) and read the cancel verdict - cancel WINS over
     // a coincident exit code (spec §6/N10; Windows kill reports code 1).
-    let cancelled = {
-        let mut j = job.lock().unwrap();
-        j.kill = None;
-        j.cancel_requested || self_killed
-    };
+    let cancelled = job::take_verdict(job, self_killed);
 
     if !cancelled && code == Some(0) {
         agg.complete_stage(ctx.weight);
@@ -229,16 +216,6 @@ use crate::processing::output::{
 use crate::processing::plan::{build_plan, KeptRange};
 use crate::validation::{validate_media_path, validate_output_path};
 use std::path::PathBuf;
-
-/// Clears `active` + `kill` on every exit path (success, error, panic).
-struct ActiveGuard<'a>(&'a ProcessingState);
-impl Drop for ActiveGuard<'_> {
-    fn drop(&mut self) {
-        let mut j = self.0.lock().unwrap();
-        j.active = false;
-        j.kill = None;
-    }
-}
 
 /// Deletes the partial sibling unless disarmed (success path renames first).
 struct SiblingGuard {
@@ -306,13 +283,13 @@ pub async fn run_processing(
                 hint: "processing already in progress".into(),
             });
         }
-        *j = ProcessingJob {
+        *j = JobState {
             active: true,
             kill: None,
             cancel_requested: false,
         };
     }
-    let _active = ActiveGuard(job);
+    let _active = job::ActiveGuard(job);
 
     // Step 1 — validate paths (ranges complete after the probe).
     let input_path = validate_media_path(input)?;

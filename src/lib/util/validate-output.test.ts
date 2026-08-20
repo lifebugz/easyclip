@@ -19,9 +19,49 @@ test('validateSaveName: typical clean name passes', () => {
   expect(validateSaveName('שלום-עולם')).toBeNull();
 });
 
-test('validateSaveName: shell metacharacters are rejected', () => {
-  for (const bad of ['a;b', 'a|b', 'a&b', 'a$b', 'a`b', 'a\nb', 'a\rb', 'a\0b']) {
+test('validateSaveName: control characters are rejected', () => {
+  for (const bad of ['a\nb', 'a\rb', 'a\0b']) {
     expect(validateSaveName(bad)).toBe('save.error.invalid_chars');
+  }
+});
+
+test('validateSaveName: shell punctuation is accepted (argv spawn, not a shell)', () => {
+  // & $ ; ` are valid filename chars on Windows and Unix; ffmpeg runs via argv,
+  // so they are never shell-interpreted. A name like "Mom & Dad" must pass.
+  for (const ok of ['Mom & Dad', 'a$b', 'a;b', 'back`tick', '100% done']) {
+    expect(validateSaveName(ok)).toBeNull();
+  }
+});
+
+test('validateSaveName: Windows-illegal filename chars are rejected ON WINDOWS (< > : " | ? *)', () => {
+  for (const bad of ['a|b', 'a?b', 'a*b', 'a<b', 'a>b', 'a"b', 'a:b']) {
+    expect(validateSaveName(bad, true)).toBe('save.error.invalid_chars');
+  }
+});
+
+test('validateSaveName: those same chars are ACCEPTED off Windows (legal POSIX names)', () => {
+  // All seven were verified creatable on APFS. Rejecting them portably was a
+  // regression: main accepted `< > : " ? *`, and the sidecar spawns via argv so
+  // none of them is shell-unsafe.
+  for (const ok of ['a|b', 'a?b', 'a*b', 'a<b', 'a>b', 'a"b', 'a:b']) {
+    expect(validateSaveName(ok, false)).toBeNull();
+  }
+});
+
+test('validateSaveName: the SaveStep prefill is never self-rejecting off Windows', () => {
+  // SaveStep seeds `${pathStem(path)}-trimmed` unsanitised, so a source named
+  // "Trip: Day 1.mp4" produced a prefill the validator rejected - blocking
+  // Start processing on a name the user never typed.
+  expect(validateSaveName('Trip: Day 1-trimmed', false)).toBeNull();
+  expect(validateSaveName('Best of 2024?-trimmed', false)).toBeNull();
+});
+
+test('validateSaveName: platform-independent rejections still apply on both', () => {
+  for (const isWindows of [true, false]) {
+    expect(validateSaveName('foo/bar', isWindows)).toBe('save.error.invalid_chars');
+    expect(validateSaveName('foo\\bar', isWindows)).toBe('save.error.invalid_chars');
+    expect(validateSaveName('a\0b', isWindows)).toBe('save.error.invalid_chars');
+    expect(validateSaveName('CON.mp4', isWindows)).toBe('save.error.invalid_chars');
   }
 });
 
@@ -101,9 +141,16 @@ test('validateSaveDir: typical Windows dir passes (backslash separators allowed)
   expect(validateSaveDir('C:\\Users\\me\\Movies')).toBeNull();
 });
 
-test('validateSaveDir: shell metacharacters are rejected', () => {
-  for (const bad of ['/a;b', '/a|b', '/a&b', '/a$b', '/a`b', '/a\nb', '/a\rb', '/a\0b']) {
+test('validateSaveDir: control characters are rejected', () => {
+  for (const bad of ['/a\nb', '/a\rb', '/a\0b']) {
     expect(validateSaveDir(bad)).toBe('save.error.invalid_chars');
+  }
+});
+
+test('validateSaveDir: shell punctuation in a dir path is accepted', () => {
+  // e.g. a real folder "C:\Users\Mom & Dad\Videos" must not be rejected.
+  for (const ok of ['/Users/Mom & Dad/Videos', 'C:\\Users\\Mom & Dad\\Movies', '/a$b/c', '/a;b']) {
+    expect(validateSaveDir(ok)).toBeNull();
   }
 });
 

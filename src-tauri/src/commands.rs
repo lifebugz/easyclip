@@ -4,6 +4,7 @@
 use crate::error::AppError;
 use crate::ffmpeg::invoker::FfmpegInvoker;
 use crate::ffmpeg::probe::ProbeCommand;
+use crate::ffmpeg::proxy_run::{run_proxy, ProxyEvent, ProxyResult, ProxyState};
 use crate::ffmpeg::MediaInfo;
 use crate::processing::plan::{build_plan, KeptRange};
 use crate::processing::{run_processing, ProcessingEvent, ProcessingResult, ProcessingState};
@@ -40,6 +41,19 @@ pub async fn probe_media(
     let validated = validate_media_path(&path)?;
     let invoker: &dyn FfmpegInvoker = state.inner().as_ref();
     ProbeCommand::run(invoker, &validated as &Path).await
+}
+
+#[tauri::command]
+pub async fn extract_poster_frame(
+    path: String,
+    time_seconds: f64,
+    state: tauri::State<'_, FfmpegInvokerHandle>,
+    poster: tauri::State<'_, crate::ffmpeg::poster::PosterState>,
+) -> Result<String, AppError> {
+    let validated = validate_media_path(&path)?;
+    let invoker: &dyn FfmpegInvoker = state.inner().as_ref();
+    crate::ffmpeg::poster::PosterCommand::run(invoker, &poster, &validated as &Path, time_seconds)
+        .await
 }
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
@@ -102,8 +116,55 @@ pub async fn process_media(
     Ok(result)
 }
 
+/// Build (or fetch from cache) a WebKit-playable preview proxy for a file the
+/// webview failed to decode. Preview-only: trim/export always use the original.
+#[tauri::command]
+pub async fn build_preview_proxy(
+    path: String,
+    force_transcode: bool,
+    on_event: Channel<ProxyEvent>,
+    app: tauri::AppHandle,
+    invoker: tauri::State<'_, FfmpegInvokerHandle>,
+    state: tauri::State<'_, ProxyState>,
+) -> Result<ProxyResult, AppError> {
+    use tauri::Manager;
+    let cache_dir = app
+        .path()
+        .app_cache_dir()
+        .map_err(|e| AppError::Unknown {
+            details: format!("app cache dir: {e}"),
+        })?
+        .join("preview-proxies");
+    let emit = move |ev: ProxyEvent| {
+        // Sends after webview teardown error harmlessly (same as processing).
+        let _ = on_event.send(ev);
+    };
+    run_proxy(
+        invoker.inner().as_ref(),
+        state.inner(),
+        &path,
+        &cache_dir,
+        force_transcode,
+        &emit,
+    )
+    .await
+}
+
+/// Idempotent mirror of cancel_processing for the proxy job.
+#[tauri::command]
+pub fn cancel_preview_proxy(state: tauri::State<'_, ProxyState>) {
+    let kill = {
+        let mut j = state.lock().unwrap();
+        j.cancel_requested = true;
+        j.kill.take()
+    };
+    if let Some(k) = kill {
+        k();
+    }
+}
+
 /// Idempotent: no active job → flag set + no kill = harmless no-op (the
-/// next claim resets the flag — spec §6/B3).
+/// next claim resets the flag - spec §6/B3).
 #[tauri::command]
 pub fn cancel_processing(job: tauri::State<'_, ProcessingState>) {
     let kill = {
@@ -198,6 +259,45 @@ mod tests {
         // fires before the orchestrator runs.
         let r = validate_media_path("/this/does/not/exist.mp4");
         assert!(matches!(r, Err(AppError::InputPathInvalid { .. })));
+    }
+
+    #[tokio::test]
+    async fn extract_poster_frame_rejects_missing_input_path() {
+        // The command-body validator fires before PosterCommand::run.
+        let r = validate_media_path("/this/does/not/exist.mkv");
+        assert!(matches!(r, Err(AppError::InputPathInvalid { .. })));
+    }
+
+    #[tokio::test]
+    async fn extract_poster_frame_runs_on_validated_path() {
+        // Exercise the command body's happy control-flow (validate → run) against
+        // a mock scripted with a successful exit, mirroring the
+        // probe_media_returns_media_info_on_happy_path pattern. The mock exits 0
+        // without writing PosterCommand's internal tempfile, so the read yields 0
+        // bytes → the empty-output reject contract fires (an exit-0-but-empty run
+        // is a failure, not Ok("")). Real bytes → Task 11 UAT.
+        let mut f = NamedTempFile::new().unwrap();
+        write!(f, "fake-but-existing").unwrap();
+        let path_str = f.path().to_string_lossy().to_string();
+
+        let mock = MockInvoker::ok("{}", "");
+        mock.push_run(crate::ffmpeg::invoker::ScriptedRun {
+            events: vec![crate::ffmpeg::invoker::RunEvent::Terminated {
+                code: Some(0),
+                signal: None,
+            }],
+        });
+        let handle: FfmpegInvokerHandle = Arc::new(mock);
+
+        let validated = validate_media_path(&path_str).unwrap();
+        let r = crate::ffmpeg::poster::PosterCommand::run(
+            handle.as_ref(),
+            &crate::ffmpeg::job::SharedJob::default(),
+            &validated,
+            0.0,
+        )
+        .await;
+        assert!(matches!(r, Err(AppError::Unknown { .. })), "got {r:?}");
     }
 }
 

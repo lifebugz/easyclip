@@ -13,7 +13,7 @@ use crate::error::AppError;
 use std::path::{Path, PathBuf};
 
 pub fn validate_media_path(input: &str) -> Result<PathBuf, AppError> {
-    validate_no_shell_metachars(input).map_err(|_| AppError::InputPathInvalid {
+    validate_no_control_chars(input).map_err(|_| AppError::InputPathInvalid {
         path: input.to_string(),
     })?;
     let p = PathBuf::from(input);
@@ -37,13 +37,27 @@ pub fn validate_media_path(input: &str) -> Result<PathBuf, AppError> {
 /// rename would clobber the source — "Original file is never modified" is a
 /// product promise.
 pub fn validate_output_path(output: &str, input: &str) -> Result<PathBuf, AppError> {
-    validate_no_shell_metachars(output).map_err(|_| AppError::OutputPathInvalid {
+    validate_no_control_chars(output).map_err(|_| AppError::OutputPathInvalid {
         path: output.to_string(),
     })?;
     validate_not_reserved_windows_name(output).map_err(|_| AppError::OutputPathInvalid {
         path: output.to_string(),
     })?;
     let p = PathBuf::from(output);
+    // Host-gated, not portable: `< > : " | ? *` are unwritable as an NTFS filename
+    // but perfectly legal on APFS/ext4, and SaveStep prefills the name from the
+    // source stem - so rejecting them everywhere blocked export on a name the app
+    // generated itself. Leaf only: a directory legitimately carries `:` (drive
+    // letter) and `\` / `/` (separators).
+    if cfg!(windows) {
+        if let Some(leaf) = p.file_name().and_then(|os| os.to_str()) {
+            validate_no_windows_illegal_name_chars(leaf).map_err(|_| {
+                AppError::OutputPathInvalid {
+                    path: output.to_string(),
+                }
+            })?;
+        }
+    }
     let parent = p.parent().ok_or_else(|| AppError::OutputPathInvalid {
         path: output.to_string(),
     })?;
@@ -79,19 +93,41 @@ pub fn validate_output_path(output: &str, input: &str) -> Result<PathBuf, AppErr
 }
 
 /// Returns `Err(())` on rejection — callers map to the appropriate AppError variant.
-fn validate_no_shell_metachars(s: &str) -> Result<(), ()> {
+///
+/// Rejects only characters that are genuinely unsafe in a path string:
+/// - NUL (`\0`) truncates the argv entry handed to the sidecar child process.
+/// - CR/LF (`\n`/`\r`) are control characters: pathological in a path and
+///   invalid in Windows filenames.
+///
+/// It deliberately does NOT reject shell metacharacters (`; | & $ ` `). The
+/// sidecar is spawned via argv (`tauri_plugin_shell::sidecar(...).spawn()` /
+/// `std::process::Command`), NOT through a shell, so those characters cannot be
+/// interpreted — and they are common, valid filename characters (e.g. a folder
+/// named "Mom & Dad"). Rejecting them broke real, safe user paths for no benefit.
+fn validate_no_control_chars(s: &str) -> Result<(), ()> {
     if s.is_empty() {
         return Err(());
     }
-    if s.contains('\0') {
-        return Err(());
-    }
-    // Conservative deny list: any of these in a path indicates either an
-    // injection attempt or a path we cannot safely render in shell-exposed
-    // contexts (the sidecar runs as a child process, so embedded NULs would
-    // truncate the argv entry on some platforms even without a shell).
-    for ch in [';', '|', '&', '$', '`', '\n', '\r'] {
+    for ch in ['\0', '\n', '\r'] {
         if s.contains(ch) {
+            return Err(());
+        }
+    }
+    Ok(())
+}
+
+/// Returns `Err(())` on rejection — callers map to the appropriate AppError variant.
+///
+/// Rejects the characters that are illegal in a Windows (NTFS) FILENAME: any of
+/// `< > : " | ? *`. These differ from shell metacharacters — they are not a
+/// spawn-safety concern (the sidecar runs via argv) but they cannot appear in a
+/// filename on Windows, so a name containing one passes validation yet fails the
+/// final file write/rename with an opaque OS error. Apply only to a leaf
+/// filename, never a full path (a path legitimately contains `:` for a drive
+/// letter and `\`/`/` as separators). Mirrors validate-output.ts::validateSaveName.
+fn validate_no_windows_illegal_name_chars(leaf: &str) -> Result<(), ()> {
+    for ch in ['<', '>', ':', '"', '|', '?', '*'] {
+        if leaf.contains(ch) {
             return Err(());
         }
     }
@@ -151,8 +187,12 @@ mod tests {
     }
 
     #[test]
-    fn validate_media_path_rejects_shell_metachars() {
-        for bad in ["a;b", "a|b", "a&b", "a$b", "a`b", "a\nb", "a\rb", "a\0b"] {
+    fn validate_media_path_rejects_control_chars() {
+        // Control characters are genuinely unsafe in a path string: NUL truncates
+        // the argv entry handed to the sidecar child; CR/LF are pathological and
+        // invalid in Windows filenames. Shell metacharacters are NOT here — the
+        // sidecar is spawned via argv, not a shell (see invoker.rs).
+        for bad in ["a\nb", "a\rb", "a\0b"] {
             assert!(
                 matches!(
                     validate_media_path(bad),
@@ -160,6 +200,28 @@ mod tests {
                 ),
                 "expected rejection for {:?}",
                 bad
+            );
+        }
+    }
+
+    #[test]
+    fn validate_media_path_accepts_shell_punctuation_in_real_filenames() {
+        // ffmpeg/ffprobe run via argv (no shell), so &, $, ;, ` are harmless and
+        // are valid filename chars on Windows AND Unix. A real file named e.g.
+        // "Mom & Dad.mp4" must be openable, not rejected as an "injection".
+        let d = TempDir::new().unwrap();
+        for name in [
+            "Mom & Dad.mp4",
+            "a$b.mp4",
+            "a;b.mp4",
+            "back`tick.mp4",
+            "100% done.mp4",
+        ] {
+            let input = make_input(&d, name);
+            assert!(
+                validate_media_path(&input).is_ok(),
+                "expected acceptance for {:?}",
+                name
             );
         }
     }
@@ -204,13 +266,10 @@ mod tests {
     }
 
     #[test]
-    fn validate_output_path_rejects_shell_metachars() {
+    fn validate_output_path_rejects_control_chars() {
         let d = TempDir::new().unwrap();
         let input = make_input(&d, "source.mp4");
-        for bad in [
-            "a;b.mp4", "a|b.mp4", "a&b.mp4", "a$b.mp4", "a`b.mp4", "a\nb.mp4", "a\rb.mp4",
-            "a\0b.mp4",
-        ] {
+        for bad in ["a\nb.mp4", "a\rb.mp4", "a\0b.mp4"] {
             let p = d.path().join(bad);
             assert!(
                 matches!(
@@ -219,6 +278,48 @@ mod tests {
                 ),
                 "expected rejection for {:?}",
                 bad
+            );
+        }
+    }
+
+    #[test]
+    fn validate_output_path_gates_windows_illegal_name_chars_on_windows() {
+        // `< > : " | ? *` cannot be written as an NTFS filename, but all seven are
+        // legal on APFS/ext4 (verified). Rejecting them everywhere blocked names
+        // the app itself prefills from the source stem, so the check is host-gated.
+        let d = TempDir::new().unwrap();
+        let input = make_input(&d, "source.mp4");
+        for name in [
+            "a|b.mp4", "a?b.mp4", "a*b.mp4", "a<b.mp4", "a>b.mp4", "a\"b.mp4", "a:b.mp4",
+        ] {
+            let p = d.path().join(name);
+            let r = validate_output_path(p.to_str().unwrap(), &input);
+            if cfg!(windows) {
+                assert!(
+                    matches!(r, Err(AppError::OutputPathInvalid { .. })),
+                    "expected rejection on Windows for {name:?}, got {r:?}"
+                );
+            } else {
+                assert!(
+                    r.is_ok(),
+                    "expected acceptance off Windows for {name:?}, got {r:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn validate_output_path_accepts_shell_punctuation() {
+        // Same rationale as the input side: argv spawn means &, $, ;, ` in the
+        // destination name are safe and common (e.g. "Mom & Dad").
+        let d = TempDir::new().unwrap();
+        let input = make_input(&d, "source.mp4");
+        for name in ["Mom & Dad.mp4", "a$b.mp4", "a;b.mp4", "back`tick.mp4"] {
+            let out = d.path().join(name);
+            assert!(
+                validate_output_path(out.to_str().unwrap(), &input).is_ok(),
+                "expected acceptance for {:?}",
+                name
             );
         }
     }

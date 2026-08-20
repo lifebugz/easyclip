@@ -53,7 +53,11 @@ pub struct FfmpegRun {
 pub enum ProbePass {
     /// First pass: -v error -show_format -show_streams -of json <file>
     Json,
-    /// Second pass: -v error -select_streams v:0 -show_entries packet=pts_time,flags -of csv=p=0 <file>
+    /// Second pass: -v error -select_streams V:0 -show_entries packet=pts_time,flags -of csv=p=0 <file>
+    /// `V:0` selects the FIRST video stream that is NOT an attached picture / cover
+    /// art / thumbnail (capital `V` excludes those; `:0` keeps the original "first
+    /// stream only" contract). So a cover-art stream indexed before the real video
+    /// can't shadow it (plain `v:0` would select stream-index 0, i.e. the cover).
     KeyframePackets,
 }
 
@@ -455,7 +459,12 @@ fn build_probe_args(pass: ProbePass, file: &Path) -> Vec<String> {
             "-v".into(),
             "error".into(),
             "-select_streams".into(),
-            "v:0".into(),
+            // `V:0` = the FIRST video stream excluding attached pictures / cover art /
+            // thumbnails (capital `V` drops them; `v` includes them). `:0` preserves
+            // the original single-stream contract so a multi-video file isn't
+            // interleaved. Skips a cover-art stream indexed before the real video,
+            // which plain `v:0` would wrongly select.
+            "V:0".into(),
             "-show_entries".into(),
             "packet=pts_time,flags".into(),
             "-of".into(),
@@ -503,7 +512,8 @@ mod tests {
         let args = build_probe_args(ProbePass::KeyframePackets, std::path::Path::new("/x.mp4"));
         assert!(args.iter().any(|a| a == "packet=pts_time,flags"));
         assert!(args.iter().any(|a| a == "csv=p=0"));
-        assert!(args.iter().any(|a| a == "v:0"));
+        // `V:0` = first video stream excluding attached_pic/cover-art (see ProbePass::KeyframePackets).
+        assert!(args.iter().any(|a| a == "V:0"));
         assert_eq!(args.last().unwrap(), "/x.mp4");
     }
 

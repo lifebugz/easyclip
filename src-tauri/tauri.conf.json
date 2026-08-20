@@ -12,7 +12,37 @@
   "app": {
     "withGlobalTauri": false,
     "security": {
-      "csp": "default-src 'self'; img-src 'self' data: blob: asset: https://asset.localhost; style-src 'self' 'unsafe-inline'; script-src 'self'; font-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'none'"
+      "assetProtocol": {
+        "enable": true,
+        "scope": {
+          "allow": [
+            "**/*.[mM][pP]4",
+            "**/*.[mM][oO][vV]",
+            "**/*.[mM]4[vV]",
+            "**/*.[mM][kK][vV]",
+            "**/*.[wW][eE][bB][mM]",
+            "**/*.[aA][vV][iI]",
+            "**/*.[wW][mM][vV]",
+            "**/*.[fF][lL][vV]",
+            "**/*.[mM][pP][gG]",
+            "**/*.[mM][pP][eE][gG]",
+            "**/*.[tT][sS]",
+            "**/*.3[gG][pP]",
+            "**/*.3[gG]2",
+            "**/*.[mM][tT][sS]",
+            "**/*.[mM]2[tT][sS]",
+            "**/*.[mM][pP]3",
+            "**/*.[mM]4[aA]",
+            "**/*.[aA][aA][cC]",
+            "**/*.[wW][aA][vV]",
+            "**/*.[fF][lL][aA][cC]",
+            "**/*.[oO][gG][gG]",
+            "**/*.[oO][pP][uU][sS]"
+          ],
+          "requireLiteralLeadingDot": false
+        }
+      },
+      "csp": "default-src 'self'; img-src 'self' data: blob: asset: http://asset.localhost; media-src 'self' asset: http://asset.localhost; style-src 'self' 'unsafe-inline'; script-src 'self'; font-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'none'"
     },
     "windows": [
       {

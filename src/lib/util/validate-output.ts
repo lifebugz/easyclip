@@ -9,20 +9,32 @@
 // frontend's job is to give the user immediate inline feedback before they
 // click Start processing.
 //
-// Pure — no module-scope state, no side effects. Bun-testable.
+// Pure given its arguments. `validateSaveName`'s host default reads pathSep()'s
+// module cache; pass `isWindows` explicitly to keep a call fully deterministic
+// (the Bun tests do).
 
 import type { TranslationKey } from '$lib/i18n/index.svelte';
+import { pathSep } from './path';
 
-// Shell metacharacters from validation.rs::validate_no_shell_metachars.
-// Conservative deny list: any of these in user input indicates either an
-// injection attempt or a path the FFmpeg sidecar cannot safely process.
-const SHELL_METACHARS = [';', '|', '&', '$', '`', '\n', '\r', '\0'];
+// Control characters, mirroring validation.rs::validate_no_control_chars. The
+// FFmpeg sidecar is spawned via argv (not a shell), so shell metacharacters like
+// & $ ; ` are harmless AND are valid filename characters (e.g. "Mom & Dad") — they
+// must NOT be rejected. Only NUL (truncates the argv entry) and CR/LF (control
+// chars, invalid in Windows filenames) are genuinely unsafe.
+const CONTROL_CHARS = ['\0', '\n', '\r'];
 
 // Path separators denied inside a filename. POSIX and Windows both, regardless
 // of host — the model is portable: a user typing "foo/bar" intends a subdirectory,
 // which is a UX bug rather than a save target, so we reject inline before the
 // Rust validator complains.
 const PATH_SEPARATORS_IN_NAME = ['/', '\\'];
+
+// Characters illegal in a Windows (NTFS) FILENAME. Applied on Windows hosts
+// ONLY: all seven are legal on APFS/ext4, and SaveStep prefills the name from
+// the source stem, so rejecting them portably blocked export on a name the app
+// generated itself. Mirrors validation.rs, which gates the same list on
+// cfg!(windows). Path separators are covered separately above.
+const WINDOWS_ILLEGAL_NAME_CHARS = ['<', '>', ':', '"', '|', '?', '*'];
 
 // Windows reserved device names from validation.rs::validate_not_reserved_windows_name.
 // Match is on the file_stem() (i.e., the basename minus the last extension),
@@ -74,15 +86,22 @@ function stem(name: string): string {
  * otherwise the i18n key of the relevant `save.error.*` message.
  *
  * Mirrors src-tauri/src/validation.rs::validate_output_path's filename rules:
- * shell metacharacters and Windows-reserved stems are rejected. Additionally
- * rejects path separators (POSIX `/` and Windows `\`) — a filename is never
- * supposed to contain those, and accepting them would silently create a
+ * control characters and Windows-reserved stems are rejected everywhere;
+ * Windows-illegal filename chars (`< > : " | ? *`) only when `isWindows`.
+ * Additionally rejects path separators (POSIX `/` and Windows `\`) - a filename
+ * is never supposed to contain those, and accepting them would silently create a
  * subdirectory or split the path.
+ *
+ * `isWindows` defaults to the running host; pass it explicitly in tests.
  */
-export function validateSaveName(name: string): TranslationKey | null {
+export function validateSaveName(
+  name: string,
+  isWindows: boolean = pathSep() === '\\'
+): TranslationKey | null {
   if (name.trim() === '') return 'save.error.empty';
-  if (containsAny(name, SHELL_METACHARS)) return 'save.error.invalid_chars';
+  if (containsAny(name, CONTROL_CHARS)) return 'save.error.invalid_chars';
   if (containsAny(name, PATH_SEPARATORS_IN_NAME)) return 'save.error.invalid_chars';
+  if (isWindows && containsAny(name, WINDOWS_ILLEGAL_NAME_CHARS)) return 'save.error.invalid_chars';
   const upperStem = stem(name).toUpperCase();
   if (WINDOWS_RESERVED_STEMS.has(upperStem)) return 'save.error.invalid_chars';
   return null;
@@ -99,6 +118,6 @@ export function validateSaveName(name: string): TranslationKey | null {
  */
 export function validateSaveDir(dir: string): TranslationKey | null {
   if (dir.trim() === '') return 'save.error.empty';
-  if (containsAny(dir, SHELL_METACHARS)) return 'save.error.invalid_chars';
+  if (containsAny(dir, CONTROL_CHARS)) return 'save.error.invalid_chars';
   return null;
 }

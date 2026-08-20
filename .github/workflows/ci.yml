@@ -38,6 +38,14 @@ jobs:
         uses: ./.github/actions/setup-easyclip
         with:
           rust-targets: ${{ matrix.triple }}
+        # Pass the triple explicitly so `setup:ffmpeg` skips detectTargetTriple()'s
+        # `rustc -vV` parse — the windows-latest image stopped emitting a parseable
+        # `host:` line and detection threw "could not parse rustc -vV output". The
+        # matrix already knows the triple, and setup-ffmpeg reads
+        # `process.env['EASYCLIP_TARGET_TRIPLE'] ?? detectTargetTriple()`. Step-level
+        # env is inherited by the composite action's steps.
+        env:
+          EASYCLIP_TARGET_TRIPLE: ${{ matrix.triple }}
 
       # L1 binary resolution (resolve_path_binary) consumes these. Defaults
       # point at the fetched sidecars; Windows overrides them below.
@@ -72,6 +80,12 @@ jobs:
           "EASYCLIP_TEST_FFPROBE=$bin\ffprobe.exe" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
       - name: bun run check
+        # smoke-sidecar.ts (the last command in `bun run check`) resolves the
+        # target triple the same way as setup:ffmpeg — prefer EASYCLIP_TARGET_TRIPLE
+        # over parsing `rustc -vV`, which the windows-latest image stopped emitting
+        # parseably. Without this the check job fails at the smoke step on Windows.
+        env:
+          EASYCLIP_TARGET_TRIPLE: ${{ matrix.triple }}
         run: bun run check
 
       - name: Install Playwright browsers

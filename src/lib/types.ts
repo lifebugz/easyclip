@@ -6,8 +6,9 @@ export interface MediaInfo {
   path: string;
   duration: number; // seconds
   container: string;
-  codec: string;
+  codec: string; // video codec NAME for display; '' when absent OR unidentifiable
   ext: string; // canonical extension, lowercased, no leading dot
+  hasRealVideo: boolean; // route video-vs-audio on THIS, not codec !== '' (see VideoPreview)
   hasAudio: boolean;
   keyframes: number[]; // ascending seconds; empty when over MAX_KF (snap disabled)
 }
@@ -56,4 +57,15 @@ export interface ProcessingResult {
   finalDuration: number;
   removedDuration: number;
   segmentCount: number;
+}
+
+/** Streamed while a preview proxy builds. `fraction: null` = indeterminate
+ *  (the re-probe reported a non-finite duration - no honest percentage). */
+export interface ProxyProgressEvent {
+  fraction: number | null;
+}
+
+export interface ProxyResult {
+  proxyPath: string;
+  method: 'remux' | 'transcode';
 }

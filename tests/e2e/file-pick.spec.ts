@@ -261,5 +261,10 @@ test('audio-only file hides the Codec row (no blank value)', async ({ page }) =>
   await page.goto('/');
   await page.getByRole('button', { name: 'Choose file…' }).click();
   await expect(page.locator('[data-stage="probed"]')).toBeVisible();
+  // Positive control: the rest of the detail grid must still render, so this can't
+  // false-green on a regression that collapses the whole probed card (which would
+  // ALSO drop the codec dd and silently satisfy the count(0) assertion below).
+  await expect(page.locator('dd[data-field="container"]')).toBeVisible();
+  await expect(page.locator('dd[data-field="ext"]')).toBeVisible();
   await expect(page.locator('dd[data-field="codec"]')).toHaveCount(0);
 });

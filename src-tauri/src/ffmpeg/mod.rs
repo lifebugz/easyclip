@@ -2,8 +2,13 @@
 
 pub mod concat;
 pub mod invoker;
+pub mod job;
+pub mod poster;
 pub mod probe;
 pub mod progress;
+pub mod proxy;
+pub mod proxy_cache;
+pub mod proxy_run;
 pub mod trim;
 
 use serde::Serialize;
@@ -28,10 +33,18 @@ pub struct MediaInfo {
     /// Container format name (e.g. "mov,mp4,m4a,3gp,3g2,mj2", "matroska,webm").
     pub container: String,
     /// Primary video codec name (e.g. "h264", "vp9"). Empty string when no
-    /// video stream is present.
+    /// video stream is present — OR when a real video stream's codec is
+    /// unidentifiable (ffprobe omits codec_name). Use `has_real_video`, NOT
+    /// `codec.is_empty()`, to decide whether a real video stream exists; this
+    /// field is a display string only.
     pub codec: String,
     /// Canonical extension WITHOUT the leading dot (e.g. "mp4", "mov", "mkv").
     pub ext: String,
+    /// True iff the file has a real (non-attached_pic) video stream. The
+    /// preview routes video-vs-audio on THIS, not on `codec` being non-empty:
+    /// a real video whose stream omits codec_name yields `codec == ""` yet must
+    /// still render as video. Mirrors ProbedFields::has_real_video.
+    pub has_real_video: bool,
     /// True if any audio stream is present.
     pub has_audio: bool,
     /// Ascending video-keyframe timestamps in seconds, capped at MAX_KF.
@@ -91,13 +104,19 @@ mod tests {
             container: "mov,mp4".into(),
             codec: "h264".into(),
             ext: "mp4".into(),
+            has_real_video: true,
             has_audio: true,
             keyframes: vec![0.0, 1.0, 2.0],
         };
         let json = serde_json::to_string(&mi).unwrap();
         assert!(json.contains(r#""hasAudio":true"#), "got {json}");
+        assert!(json.contains(r#""hasRealVideo":true"#), "got {json}");
         assert!(
             !json.contains(r#""has_audio""#),
+            "expected camelCase only, got {json}"
+        );
+        assert!(
+            !json.contains(r#""has_real_video""#),
             "expected camelCase only, got {json}"
         );
         assert!(json.contains(r#""ext":"mp4""#), "got {json}");

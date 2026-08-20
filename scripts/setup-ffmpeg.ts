@@ -1,12 +1,11 @@
 #!/usr/bin/env bun
-import { spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fetchToFile } from './setup-ffmpeg/fetch.ts';
 import { verifySha256 } from './setup-ffmpeg/verify.ts';
 import { extractArchive } from './setup-ffmpeg/extract.ts';
-import { placeSidecar, sidecarFilename } from './setup-ffmpeg/place.ts';
+import { placeSidecar, sidecarFilename, resolveTargetTriple } from './setup-ffmpeg/place.ts';
 
 interface BinarySpec {
   url: string;
@@ -22,16 +21,6 @@ interface ChecksumFile {
   ffmpegVersion: string;
   license: string;
   targets: Record<string, TargetSpec>;
-}
-
-function detectTargetTriple(): string {
-  const r = spawnSync('rustc', ['-vV'], { encoding: 'utf8' });
-  if (r.status !== 0) {
-    throw new Error('rustc not found on PATH; install via rustup before running setup:ffmpeg');
-  }
-  const hostLine = r.stdout.split('\n').find((line) => line.startsWith('host:'));
-  if (!hostLine) throw new Error('could not parse rustc -vV output for host triple');
-  return hostLine.replace('host:', '').trim();
 }
 
 async function fetchOnePackagedBinary(
@@ -80,7 +69,7 @@ async function main(): Promise<void> {
   const checksumPath = join(import.meta.dir, 'ffmpeg-checksums.json');
   const checksums = JSON.parse(readFileSync(checksumPath, 'utf8')) as ChecksumFile;
 
-  const triple = process.env['EASYCLIP_TARGET_TRIPLE'] ?? detectTargetTriple();
+  const triple = resolveTargetTriple();
   const spec = checksums.targets[triple];
   if (!spec) {
     throw new Error(
