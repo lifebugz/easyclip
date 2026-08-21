@@ -52,7 +52,7 @@ jobs:
     env:
       CI: true # GH runners set this already; explicit belt-and-suspenders for the macOS DMG/AppleScript hang (H1)
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0 - match ci.yml
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.0 - match ci.yml
       - uses: ./.github/actions/setup-easyclip
         with:
           rust-targets: ${{ matrix.triple }}
@@ -124,7 +124,7 @@ jobs:
       group: easyclip-homebrew-tap-push
       cancel-in-progress: false # an in-flight tap push always runs to completion
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0 - for scripts/render-brew-cask.sh
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.0 - for scripts/render-brew-cask.sh
       - name: Generate App token for the tap repo
         id: tap-token
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
@@ -140,7 +140,7 @@ jobs:
           # every permission the App installation has.
           permission-contents: write
       - name: Check out the tap (keeps the token out of a hand-built URL / .git/config)
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: lifebugz/homebrew-tap
           token: ${{ steps.tap-token.outputs.token }}
