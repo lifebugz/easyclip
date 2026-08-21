@@ -51,7 +51,7 @@
     "svelte": "^5.55.5",
     "svelte-check": "^4.4.6",
     "tailwindcss": "^4.2.4",
-    "typescript": "^6.0.3",
+    "typescript": "^7.0.2",
     "typescript-eslint": "^8.59.1",
     "vite": "^8.0.10",
     "webdriverio": "^9.27.0"
