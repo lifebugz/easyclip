@@ -25,6 +25,10 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+          # Release/tag ONLY. The next-release PR is computed by the
+          # `next-release-pr` job at the bottom, after `publish` has flipped the
+          # draft - see the comment there for why the two must be separated.
+          skip-github-pull-request: true
 
   build:
     needs: release-please
@@ -267,3 +271,48 @@ jobs:
           gh issue create -R "$GITHUB_REPOSITORY" \
             --title "cask bump failed for ${TAG}" \
             --body "$(printf 'The homebrew job failed while bumping Casks/easyclip.rb in lifebugz/homebrew-tap for %s.\n\nRun: %s\n\nThe release itself is public; only the cask bump failed (stale cask beats broken cask). Repair: re-run the failed job (its needs outputs persist), or hand-edit the tap (2-line change). Note a re-run replays the workflow YAML as of the original commit.' "$TAG" "$RUN_URL")"
+
+  # Compute the NEXT release PR - deliberately last, after `publish`.
+  #
+  # release-please normally tags the release and computes the next PR in one
+  # invocation. With `draft: true` (release-please-config.json) that second half
+  # asks GitHub for the latest release while the one just created is still a
+  # draft, and GitHub's latest-release lookup EXCLUDES drafts. It then finds no
+  # releases at all - not even the previously published one - falls back to the
+  # entire history, and opens a PR that re-lists already-shipped commits under an
+  # inflated version. That produced the bogus "release 0.4.0" PR #41 right after
+  # v0.3.0 (issue #42), whose changelog resurrected commits from before v0.2.0:
+  #
+  #     ⚠ Expected 1 releases, only found 0
+  #     ❯ looking for tagName: v0.3.0
+  #     ❯ Set(0) {}
+  #     ✔ Considering: 30 commits
+  #
+  # Running it here instead means the release is already public, so the lookup
+  # finds it and the baseline is correct. Costs ~13 min of latency on the next
+  # PR appearing after a release; nothing else.
+  next-release-pr:
+    needs: [release-please, publish]
+    # Runs on EVERY push to main, not just releases - otherwise the release PR
+    # would stop accumulating commits between releases. `always()` is required
+    # because build/publish are skipped on a non-release push, which would
+    # otherwise skip this job too. The second clause is the real guard: when a
+    # release WAS created, only proceed if `publish` actually made it public -
+    # computing against a still-draft release is the very bug this job exists to
+    # avoid, so on a failed build we skip rather than reintroduce it.
+    if: >-
+      always() && needs.release-please.result == 'success' &&
+      (needs.release-please.outputs.release_created != 'true' ||
+       needs.publish.result == 'success')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write # create/update the release branch
+      pull-requests: write # open/maintain the release PR
+    steps:
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+          # PR ONLY - the release/tag was already handled by `release-please`.
+          skip-github-release: true
