@@ -5,5 +5,18 @@
   "trailingComma": "none",
   "printWidth": 100,
   "plugins": ["prettier-plugin-svelte"],
-  "overrides": [{ "files": "*.svelte", "options": { "parser": "svelte" } }]
+  "overrides": [
+    {
+      "files": "*.svelte",
+      "options": {
+        "parser": "svelte"
+      }
+    },
+    {
+      "files": "src-tauri/tauri.conf.json",
+      "options": {
+        "printWidth": 1
+      }
+    }
+  ]
 }
