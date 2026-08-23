@@ -61,6 +61,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "copyright": "Copyright (c) 2026 lifebugz",
     "macOS": {
       "signingIdentity": "-"
     },
