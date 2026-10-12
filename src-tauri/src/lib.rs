@@ -3,6 +3,8 @@
 pub mod commands;
 pub mod error;
 pub mod ffmpeg;
+#[cfg(desktop)]
+pub mod menu;
 pub mod processing;
 pub mod validation;
 
@@ -42,6 +44,9 @@ pub fn run() {
             commands::reveal_output,
             commands::open_output
         ]);
+
+    #[cfg(all(desktop, not(target_os = "macos")))]
+    let builder = builder.menu(menu::help_menu);
 
     #[cfg(all(target_os = "macos", debug_assertions))]
     let builder = builder.plugin(tauri_plugin_webdriver_automation::init());

@@ -2,7 +2,7 @@
 name = "easyclip"
 version = "0.3.0"
 description = "Cross-platform desktop media trimmer"
-authors = ["Haim"]
+authors = ["lifebugz"]
 license = "MIT"
 edition = "2021"
 rust-version = "1.82"
