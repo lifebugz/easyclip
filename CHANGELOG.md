@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.4.0](https://github.com/lifebugz/easyclip/compare/v0.3.0...v0.4.0) (2026-10-12)
+
+
+### Features
+
+* **menu:** show the app version via Help &gt; About on Windows and Linux ([#45](https://github.com/lifebugz/easyclip/issues/45)) ([ca5dd97](https://github.com/lifebugz/easyclip/commit/ca5dd97fba929973ab701ea671b6c028d695d27f))
+
+
+### Bug Fixes
+
+* **deps:** update async-trait to 0.1.92 for clippy 1.99 ([#53](https://github.com/lifebugz/easyclip/issues/53)) ([b784f83](https://github.com/lifebugz/easyclip/commit/b784f8356af8316bd3293514064311f6f91dc474))
+
 ## [0.3.0](https://github.com/lifebugz/easyclip/compare/v0.2.0...v0.3.0) (2026-08-21)
 
 
